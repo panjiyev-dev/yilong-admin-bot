@@ -19,7 +19,7 @@ if (!admin.apps.length) {
 }
 const db = admin.firestore();
 
-/* ========= STATIC CATALOG (seed -> products/{section}/categories/{category}) ========= */
+/* ========= STATIC CATALOG ========= */
 const CATALOG = [
   {
     id: 'listovye-materialy',
@@ -144,6 +144,7 @@ const ProductSchema = z.object({
   available: z.boolean().default(true),
   sectionId: z.string().min(1),
   categoryId: z.string().min(1),
+  sizeId: z.string().optional(),
   createdAt: z.any().optional()
 });
 const BannerSchema = z.object({
@@ -151,16 +152,23 @@ const BannerSchema = z.object({
   sectionId: z.string().min(1),
   caption: z.string().optional()
 });
+const SizeSchema = z.object({
+  name: z.string().min(1),
+  size: z.string().min(1),
+  image: z.string().regex(/^https?:\/\//, 'image must be http(s) url'),
+  createdAt: z.any().optional()
+});
 
 /* ========= BOT / SESSION ========= */
 const bot = new Telegraf(BOT_TOKEN);
 bot.use(session({
   defaultSession: () => ({
     flow: undefined,           // 'product' | 'banner'
-    state: undefined,          // S_* yoki B_*
+    state: undefined,          // S_* , B_* , CAT_IMAGE, SZ_NAME, SZ_SIZE
     product: undefined,        // draft
     banner: undefined,         // draft
-    selected: undefined        // { sectionId, categoryId, docId? }
+    sizeDraft: undefined,      // {name,size}
+    selected: undefined        // { sectionId, categoryId, mode?, sizeId?, docId?, catImage? }
   })
 }));
 bot.catch((err) => console.error('Telegraf error:', err));
@@ -179,24 +187,31 @@ const previewProductCaption = (p) =>
   `<b>Status:</b> ${p.available ? '✅ Bor' : '❌ Qolmagan'}\n` +
   `<b>Tavsif:</b> ${p.description}`;
 
-const productCardCaption = (p, secTitle = '', catTitle = '') =>
+const productCardCaption = (p, secTitle = '', catTitle = '', szLabel = '') =>
   `📦 <b>${p.title}</b>\n` +
-  `${secTitle && catTitle ? `<i>${secTitle} → ${catTitle}</i>\n` : ''}` +
+  `${secTitle && catTitle ? `<i>${secTitle} → ${catTitle}${szLabel ? ` → ${szLabel}`:''}</i>\n` : ''}` +
   `<b>Narx:</b> ${p.price}\n` +
   `<b>Status:</b> ${p.available ? '✅ Bor' : '❌ Qolmagan'}\n\n` +
   `${p.description || ''}`;
 
-const actionKb = Markup.inlineKeyboard([
-  [Markup.button.callback('🗑️ O‘chirish', 'prod:delete'), Markup.button.callback('❗️ Qolmagan', 'prod:na')],
+const actionKbFor = (available) => Markup.inlineKeyboard([
+  [
+    available
+      ? Markup.button.callback('❗️ Qolmagan', 'prod:toggle')
+      : Markup.button.callback('♻️ Mavjud qilsin', 'prod:toggle')
+  ],
+  [Markup.button.callback('🗑️ O‘chirish', 'prod:delete')],
   [Markup.button.callback('⬅️ Orqaga', 'back:items')]
 ]);
 
 /* Firestore paths */
 const sectionsRef = () => db.collection('products');
-const categoriesRef = (sectionId) => sectionsRef(sectionId).doc(sectionId).collection('categories');
-const itemsRef = (sectionId, categoryId) => categoriesRef(sectionId).doc(categoryId).collection('items');
+const categoriesRef = (sectionId) => sectionsRef().doc(sectionId).collection('categories');
+const itemsRefCat = (sectionId, categoryId) => categoriesRef(sectionId).doc(categoryId).collection('items');
+const sizesRef = (sectionId, categoryId) => categoriesRef(sectionId).doc(categoryId).collection('sizes');
+const itemsRefSize = (sectionId, categoryId, sizeId) => sizesRef(sectionId, categoryId).doc(sizeId).collection('items');
 
-/* Builders */
+/* UI builders */
 function sectionsKb(sections) {
   return Markup.inlineKeyboard(sections.map(s => [Markup.button.callback(s.title, `sec:${s.id}`)]));
 }
@@ -208,19 +223,35 @@ function categoriesKb(sectionId, categories) {
 function itemsKb(sectionId, categoryId, items) {
   const rows = items.map(i => {
     const mark = i.available ? '✅' : '❌';
-    // ⚠️ faqat docId yuboramiz (64 bayt limiti muammosini yechadi)
     return [Markup.button.callback(`${mark} ${i.title}`, `pv:${i.id}`)];
   });
   rows.push([Markup.button.callback('➕ Yangi tovar', 'padd')]);
   rows.push([Markup.button.callback('⬅️ Orqaga (kategoriyalar)', 'back:cats')]);
   return Markup.inlineKeyboard(rows);
 }
+function sizeViewFullKb(sectionId, categoryId, sizeId, items) {
+  const rows = items.map(i => {
+    const mark = i.available ? '✅' : '❌';
+    return [Markup.button.callback(`${mark} ${i.title}`, `pv2:${i.id}`)];
+  });
+  rows.push([Markup.button.callback('➕ Product qo‘shish', 'padd')]);
+  rows.push([Markup.button.callback('🗑️ O‘lchamni o‘chirish', 'szdel')]);
+  rows.push([Markup.button.callback('⬅️ Orqaga (o‘lchamlar)', 'back:sz')]);
+  return Markup.inlineKeyboard(rows);
+}
+/* 🔧 LOST HELPER — sizesKb (o‘lchamlar ro‘yxati) */
+function sizesKb(sectionId, categoryId, sizes) {
+  const rows = sizes.map(s => [Markup.button.callback(`${s.name} — ${s.size}`, `szv:${s.id}`)]);
+  rows.push([Markup.button.callback('➕ O‘lcham qo‘shish', 'szadd')]);
+  rows.push([Markup.button.callback('⬅️ Orqaga (kategoriyalar)', 'back:cats')]);
+  return Markup.inlineKeyboard(rows);
+}
 
 /* ========= DATA ========= */
 async function seedCatalogIfNeeded() {
-  const metaRef = db.collection('meta').doc('catalogSeed_productsTree');
+  const metaRef = db.collection('meta').doc('catalogSeed_productsTree_v4');
   const meta = await metaRef.get();
-  const seedVersion = 2; // versiyani oshirdim
+  const seedVersion = 4;
 
   if (!(meta.exists && meta.data()?.version === seedVersion)) {
     for (let i = 0; i < CATALOG.length; i++) {
@@ -234,7 +265,6 @@ async function seedCatalogIfNeeded() {
     await metaRef.set({ version: seedVersion, updatedAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
   }
 }
-
 async function fetchSections() {
   const snap = await sectionsRef().orderBy('order').get();
   return snap.docs.map(d => ({ id: d.id, ...(d.data()) }));
@@ -243,16 +273,38 @@ async function fetchCategories(sectionId) {
   const snap = await categoriesRef(sectionId).orderBy('order').get();
   return snap.docs.map(d => ({ id: d.id, ...(d.data()) }));
 }
-async function fetchItems(sectionId, categoryId, limit = 30) {
-  const snap = await itemsRef(sectionId, categoryId).limit(limit).get();
+async function fetchItemsCat(sectionId, categoryId, limit = 30) {
+  const snap = await itemsRefCat(sectionId, categoryId).limit(limit).get();
   const list = snap.docs.map(d => ({ id: d.id, ...(d.data()) }));
-  list.sort((a, b) => (a.title || '').localeCompare((b.title || ''), 'ru'));
+  list.sort((a,b) => (a.title||'').localeCompare((b.title||''), 'ru'));
   return list;
 }
-async function getTitles(sectionId, categoryId) {
+async function fetchItemsSize(sectionId, categoryId, sizeId, limit = 50) {
+  const snap = await itemsRefSize(sectionId, categoryId, sizeId).limit(limit).get();
+  const list = snap.docs.map(d => ({ id: d.id, ...(d.data()) }));
+  list.sort((a,b) => (a.title||'').localeCompare((b.title||''), 'ru'));
+  return list;
+}
+async function fetchSizes(sectionId, categoryId, limit = 50) {
+  const snap = await sizesRef(sectionId, categoryId).limit(limit).get();
+  const list = snap.docs.map(d => ({ id: d.id, ...(d.data()) }));
+  list.sort((a,b) => (a.name||'').localeCompare((b.name||''), 'ru'));
+  return list;
+}
+async function getTitles(sectionId, categoryId, sizeId) {
   const sDoc = await sectionsRef().doc(sectionId).get();
   const cDoc = await categoriesRef(sectionId).doc(categoryId).get();
-  return { sectionTitle: sDoc.data()?.title || sectionId, categoryTitle: cDoc.data()?.title || categoryId };
+  let szLabel = '';
+  if (sizeId) {
+    const zDoc = await sizesRef(sectionId, categoryId).doc(sizeId).get();
+    const z = zDoc.data();
+    if (z) szLabel = `${z.name} — ${z.size}`;
+  }
+  return {
+    sectionTitle: sDoc.data()?.title || sectionId,
+    categoryTitle: cDoc.data()?.title || categoryId,
+    sizeLabel: szLabel
+  };
 }
 
 /* ========= STATES ========= */
@@ -266,43 +318,45 @@ const B_IMAGE = 'B_IMAGE';
 const B_SECTION = 'B_SECTION';
 const B_CAPTION = 'B_CAPTION';
 
+const CAT_IMAGE = 'CAT_IMAGE';
+const SZ_NAME = 'SZ_NAME';
+const SZ_SIZE = 'SZ_SIZE';
+
 /* ========= COMMANDS ========= */
 bot.start(async (ctx) => {
   await ctx.reply('Salom! 👋', mainMenu());
 });
 bot.command('cancel', async (ctx) => {
-  ctx.session = { flow: undefined, state: undefined, product: undefined, banner: undefined, selected: undefined };
+  ctx.session = { flow: undefined, state: undefined, product: undefined, banner: undefined, sizeDraft: undefined, selected: undefined };
   await ctx.reply('Bekor qilindi.', mainMenu());
 });
 
 /* ========= TEXT HANDLER ========= */
 bot.on('text', async (ctx, next) => {
   if (!isAdmin(ctx)) return ctx.reply('Sizda ruxsat yo‘q.');
-  ctx.session ??= { flow: undefined, state: undefined, product: undefined, banner: undefined, selected: undefined };
-
+  ctx.session ??= { flow: undefined, state: undefined, product: undefined, banner: undefined, sizeDraft: undefined, selected: undefined };
   const txt = (ctx.message?.text || '').trim();
 
-  /* Entry points */
   if (txt === '🛒 Product qo‘shish') {
-    ctx.session = { flow: 'product', state: undefined, product: undefined, banner: undefined, selected: undefined };
+    ctx.session = { flow: 'product', state: undefined, product: undefined, banner: undefined, sizeDraft: undefined, selected: undefined };
     const sections = await fetchSections();
     return ctx.reply('Bo‘limni tanlang:', sectionsKb(sections));
   }
   if (txt === '🖼 Banner qo‘shish') {
-    ctx.session = { flow: 'banner', state: B_IMAGE, product: undefined, banner: {}, selected: undefined };
+    ctx.session = { flow: 'banner', state: B_IMAGE, product: undefined, banner: {}, sizeDraft: undefined, selected: undefined };
     return ctx.reply('Banner uchun rasm yuboring (foto yoki http/https URL).');
   }
 
-  /* Banner: image as URL */
+  // Banner URL
   if (ctx.session.flow === 'banner' && ctx.session.state === B_IMAGE) {
-    if (!/^https?:\/\//.test(txt)) return ctx.reply('Iltimos, foto yuboring yoki to‘g‘ri rasm URL kiriting (http/https).');
+    if (!/^https?:\/\//.test(txt)) return ctx.reply('Iltimos, to‘g‘ri rasm URL (http/https) kiriting yoki foto yuboring.');
     ctx.session.banner.image = txt;
     ctx.session.state = B_SECTION;
     const sections = await fetchSections();
     return ctx.reply('Banner qaysi bo‘limga tegishli?', sectionsKb(sections));
   }
 
-  /* Banner: caption */
+  // Banner caption
   if (ctx.session.flow === 'banner' && ctx.session.state === B_CAPTION) {
     const caption = (txt === '-' ? undefined : txt);
     const parsed = BannerSchema.safeParse({
@@ -322,34 +376,62 @@ bot.on('text', async (ctx, next) => {
     } catch (e) {
       await ctx.reply(`❌ Saqlashda xatolik: ${String(e)}`);
     } finally {
-      ctx.session = { flow: undefined, state: undefined, product: undefined, banner: undefined, selected: undefined };
+      ctx.session = { flow: undefined, state: undefined, product: undefined, banner: undefined, sizeDraft: undefined, selected: undefined };
     }
     return;
   }
 
-  /* Product form */
+  // Category image text URL
+  if (ctx.session.flow === 'product' && ctx.session.state === CAT_IMAGE) {
+    if (!/^https?:\/\//.test(txt)) return ctx.reply('Kategoriya uchun to‘g‘ri rasm URL kiriting (http/https) yoki foto yuboring.');
+    const { sectionId, categoryId } = ctx.session.selected || {};
+    await categoriesRef(sectionId).doc(categoryId).set({ image: txt }, { merge: true });
+    ctx.session.selected.catImage = txt;
+    ctx.session.state = undefined;
+    return routeAfterCategorySelection(ctx);
+  }
+
+  // Size add flow
+  if (ctx.session.flow === 'product' && ctx.session.state === SZ_NAME) {
+    ctx.session.sizeDraft = { name: txt };
+    ctx.session.state = SZ_SIZE;
+    return ctx.reply('O‘lchamni kiriting (masalan: 1,22м х 2,44м):');
+  }
+  if (ctx.session.flow === 'product' && ctx.session.state === SZ_SIZE) {
+    const { sectionId, categoryId, catImage } = ctx.session.selected || {};
+    const draft = { name: ctx.session.sizeDraft?.name || '', size: txt, image: catImage || '' };
+    const parsed = SizeSchema.safeParse(draft);
+    if (!parsed.success) {
+      ctx.session.sizeDraft = undefined; ctx.session.state = undefined;
+      return ctx.reply('❌ O‘lcham maʼlumotlari noto‘g‘ri. /start dan qayta urinib ko‘ring.');
+    }
+    await sizesRef(sectionId, categoryId).add({ ...parsed.data, createdAt: admin.firestore.FieldValue.serverTimestamp() });
+    ctx.session.sizeDraft = undefined; ctx.session.state = undefined;
+    return renderSizeList(ctx);
+  }
+
+  // Product form
   if (ctx.session.flow === 'product') {
     switch (ctx.session.state) {
       case S_TITLE:
-        ctx.session.product.title = txt;
+        ctx.session.product = { ...(ctx.session.product||{}), title: txt };
         ctx.session.state = S_IMAGE;
         return ctx.reply('2/4 — Rasm URL yuboring (http/https):');
-
       case S_IMAGE:
         ctx.session.product.image = txt;
         ctx.session.state = S_PRICE;
         return ctx.reply('3/4 — Narxni yuboring (masalan: "от 2 500 ₸" yoki "2500 ₸"):');
-
       case S_PRICE:
         ctx.session.product.price = txt;
         ctx.session.state = S_DESC;
         return ctx.reply('4/4 — Tavsif (description) yuboring:');
-
       case S_DESC: {
         ctx.session.product.description = txt;
+        const { sectionId, categoryId, mode, sizeId } = ctx.session.selected || {};
         const draft = {
           ...ctx.session.product,
-          ...ctx.session.selected,
+          sectionId, categoryId,
+          sizeId: mode === 'size' ? sizeId : undefined,
           available: true
         };
         const parsed = ProductSchema.safeParse(draft);
@@ -377,32 +459,49 @@ bot.on('text', async (ctx, next) => {
         }
         return;
       }
-      default:
-        break;
+      default: break;
     }
   }
 
   return next();
 });
 
-/* ========= PHOTO HANDLER (banner image via photo) ========= */
+/* ========= PHOTO HANDLERS ========= */
 bot.on('photo', async (ctx) => {
   if (!isAdmin(ctx)) return ctx.reply('Sizda ruxsat yo‘q.');
-  if (!(ctx.session.flow === 'banner' && ctx.session.state === B_IMAGE)) return;
 
-  try {
-    const best = ctx.message.photo.at(-1);
-    const link = await ctx.telegram.getFileLink(best.file_id);
-    ctx.session.banner.image = String(link);
-    ctx.session.state = B_SECTION;
-    const sections = await fetchSections();
-    await ctx.reply('Banner qaysi bo‘limga tegishli?', sectionsKb(sections));
-  } catch {
-    await ctx.reply('Rasm linkini olishda xatolik. Boshqa foto yuboring yoki URL kiriting.');
+  // Banner photo
+  if (ctx.session.flow === 'banner' && ctx.session.state === B_IMAGE) {
+    try {
+      const best = ctx.message.photo.at(-1);
+      const link = await ctx.telegram.getFileLink(best.file_id);
+      ctx.session.banner.image = String(link);
+      ctx.session.state = B_SECTION;
+      const sections = await fetchSections();
+      return ctx.reply('Banner qaysi bo‘limga tegishli?', sectionsKb(sections));
+    } catch {
+      return ctx.reply('Rasm linkini olishda xatolik. Boshqa foto yuboring yoki URL kiriting.');
+    }
+  }
+
+  // Category image photo
+  if (ctx.session.flow === 'product' && ctx.session.state === CAT_IMAGE) {
+    try {
+      const best = ctx.message.photo.at(-1);
+      const link = await ctx.telegram.getFileLink(best.file_id);
+      const url = String(link);
+      const { sectionId, categoryId } = ctx.session.selected || {};
+      await categoriesRef(sectionId).doc(categoryId).set({ image: url }, { merge: true });
+      ctx.session.selected.catImage = url;
+      ctx.session.state = undefined;
+      return routeAfterCategorySelection(ctx);
+    } catch {
+      return ctx.reply('Rasm linkini olishda xatolik. Boshqa foto yuboring yoki URL kiriting.');
+    }
   }
 });
 
-/* ========= CALLBACKS: NAVIGATION ========= */
+/* ========= NAVIGATION ========= */
 bot.action('back:sections', async (ctx) => {
   await ctx.answerCbQuery();
   const sections = await fetchSections();
@@ -415,14 +514,15 @@ bot.action('back:cats', async (ctx) => {
   const cats = await fetchCategories(sectionId);
   await ctx.editMessageText('Kategoriyani tanlang:', categoriesKb(sectionId, cats));
 });
+bot.action('back:sz', async (ctx) => {
+  await ctx.answerCbQuery();
+  return renderSizeList(ctx, true);
+});
 bot.action('back:items', async (ctx) => {
   await ctx.answerCbQuery();
-  const { sectionId, categoryId } = ctx.session.selected || {};
-  if (!sectionId || !categoryId) return;
-  const items = await fetchItems(sectionId, categoryId, 30);
-  // eski xabarni textga qaytaramiz
-  try { await ctx.editMessageCaption({ caption: ' ', parse_mode: 'HTML' }); } catch {}
-  await ctx.reply('Mahsulotlar (tanlang) yoki yangi tovar qo‘shing:', itemsKb(sectionId, categoryId, items));
+  const { mode } = ctx.session.selected || {};
+  if (mode === 'size') return renderSizeView(ctx, true);
+  return renderCategoryItems(ctx, true);
 });
 
 /* Select section */
@@ -431,7 +531,7 @@ bot.action(/^sec:(.+)$/, async (ctx) => {
   const sectionId = ctx.match[1];
   if (ctx.session.flow === 'product') {
     const cats = await fetchCategories(sectionId);
-    ctx.session.selected = { sectionId, categoryId: undefined };
+    ctx.session.selected = { sectionId, categoryId: undefined, mode: undefined, sizeId: undefined, catImage: undefined };
     return ctx.editMessageText('Kategoriyani tanlang:', categoriesKb(sectionId, cats));
   }
   if (ctx.session.flow === 'banner' && ctx.session.state === B_SECTION) {
@@ -441,65 +541,217 @@ bot.action(/^sec:(.+)$/, async (ctx) => {
   }
 });
 
-/* Select category -> show items */
+/* Ensure category image, then auto-route */
+async function ensureCategoryImageOrAsk(ctx, sectionId, categoryId) {
+  const cDoc = await categoriesRef(sectionId).doc(categoryId).get();
+  const image = cDoc.data()?.image;
+  if (image) {
+    ctx.session.selected.catImage = image;
+    return true;
+  }
+  ctx.session.state = CAT_IMAGE;
+  await ctx.editMessageText('Ushbu kategoriya uchun rasm yuboring (foto yoki http/https URL).');
+  return false;
+}
+async function routeAfterCategorySelection(ctx) {
+  const { sectionId, categoryId } = ctx.session.selected || {};
+  const sizesSnap = await sizesRef(sectionId, categoryId).limit(1).get();
+  const itemsSnap = await itemsRefCat(sectionId, categoryId).limit(1).get();
+  if (!sizesSnap.empty) {
+    ctx.session.selected.mode = 'size';
+    return renderSizeList(ctx);
+  }
+  if (!itemsSnap.empty) {
+    ctx.session.selected.mode = 'prod';
+    return renderCategoryItems(ctx);
+  }
+  ctx.session.selected.mode = undefined;
+  return ctx.reply(
+    'Rejimni tanlang:',
+    Markup.inlineKeyboard([
+      [Markup.button.callback('🧩 Mahsulot kiritish', 'md:p')],
+      [Markup.button.callback('📐 O‘lchamlar bilan', 'md:s')],
+      [Markup.button.callback('⬅️ Orqaga (kategoriyalar)', 'back:cats')]
+    ])
+  );
+}
+
 bot.action(/^cat:([^:]+):([^:]+)$/, async (ctx) => {
   await ctx.answerCbQuery();
   const sectionId = ctx.match[1];
   const categoryId = ctx.match[2];
-  ctx.session.selected = { sectionId, categoryId };
-  const list = await fetchItems(sectionId, categoryId, 30);
-  await ctx.editMessageText('Mahsulotlar (tanlang) yoki yangi tovar qo‘shing:', itemsKb(sectionId, categoryId, list));
+  ctx.session.selected = { sectionId, categoryId, mode: undefined, sizeId: undefined, catImage: undefined };
+  const ok = await ensureCategoryImageOrAsk(ctx, sectionId, categoryId);
+  if (!ok) return;
+  await routeAfterCategorySelection(ctx);
 });
 
-/* Open item card (short callback: pv:<docId>) */
+/* Manual mode choose (faqat bo‘sh kategoriyada) */
+bot.action('md:p', async (ctx) => {
+  await ctx.answerCbQuery();
+  ctx.session.selected.mode = 'prod';
+  return renderCategoryItems(ctx, true);
+});
+bot.action('md:s', async (ctx) => {
+  await ctx.answerCbQuery();
+  ctx.session.selected.mode = 'size';
+  return renderSizeList(ctx, true);
+});
+
+/* ======= Render helpers ======= */
+async function renderCategoryItems(ctx, edit = false) {
+  const { sectionId, categoryId } = ctx.session.selected || {};
+  const list = await fetchItemsCat(sectionId, categoryId, 30);
+  if (edit) {
+    try { await ctx.editMessageText('Mahsulotlar (tanlang) yoki yangi tovar qo‘shing:', itemsKb(sectionId, categoryId, list)); return; }
+    catch {}
+  }
+  await ctx.reply('Mahsulotlar (tanlang) yoki yangi tovar qo‘shing:', itemsKb(sectionId, categoryId, list));
+}
+
+async function renderSizeList(ctx, edit = false) {
+  const { sectionId, categoryId } = ctx.session.selected || {};
+  const list = await fetchSizes(sectionId, categoryId, 50);
+  if (edit) {
+    try { await ctx.editMessageText('O‘lchamlar ro‘yxati:', sizesKb(sectionId, categoryId, list)); return; }
+    catch {}
+  }
+  await ctx.reply('O‘lchamlar ro‘yxati:', sizesKb(sectionId, categoryId, list));
+}
+
+async function renderSizeView(ctx, editHeader = false) {
+  const { sectionId, categoryId, sizeId } = ctx.session.selected || {};
+  const zDoc = await sizesRef(sectionId, categoryId).doc(sizeId).get();
+  if (!zDoc.exists) return renderSizeList(ctx, true);
+  const z = zDoc.data();
+  const caption = `📐 <b>${z.name}</b>\n<b>O‘lcham:</b> ${z.size}\n`;
+  const items = await fetchItemsSize(sectionId, categoryId, sizeId, 50);
+
+  if (editHeader) {
+    try { await ctx.editMessageText(' ').catch(()=>{}); } catch {}
+  }
+  try {
+    await ctx.replyWithPhoto(
+      { url: z.image },
+      { caption, parse_mode: 'HTML', ...sizeViewFullKb(sectionId, categoryId, sizeId, items) }
+    );
+  } catch {
+    await ctx.reply(caption, { parse_mode: 'HTML', ...sizeViewFullKb(sectionId, categoryId, sizeId, items) });
+  }
+}
+
+/* ======= Sizes ======= */
+bot.action('szadd', async (ctx) => {
+  await ctx.answerCbQuery();
+  ctx.session.state = SZ_NAME;
+  ctx.session.sizeDraft = {};
+  await ctx.reply('O‘lcham nomini kiriting (masalan: ПВХ стандартной плотности 0,50):');
+});
+
+bot.action(/^szv:(.+)$/, async (ctx) => {
+  await ctx.answerCbQuery();
+  const sizeId = ctx.match[1];
+  const { sectionId, categoryId } = ctx.session.selected || {};
+  if (!sectionId || !categoryId) return ctx.reply('❌ Kontekst yo‘q. /start');
+  ctx.session.selected.sizeId = sizeId;
+  ctx.session.selected.mode = 'size';
+  return renderSizeView(ctx, true);
+});
+
+bot.action('szdel', async (ctx) => {
+  await ctx.answerCbQuery();
+  const { sectionId, categoryId, sizeId } = ctx.session.selected || {};
+  if (!sectionId || !categoryId || !sizeId) return ctx.reply('❌ Kontekst yo‘q. /start');
+  try {
+    const snap = await itemsRefSize(sectionId, categoryId, sizeId).get();
+    const batch = db.batch();
+    snap.docs.forEach(d => batch.delete(d.ref));
+    await batch.commit();
+    await sizesRef(sectionId, categoryId).doc(sizeId).delete();
+    await ctx.reply('🗑️ O‘lcham o‘chirildi.');
+  } catch (e) {
+    await ctx.reply(`❌ O‘lchamni o‘chirishda xatolik: ${String(e)}`);
+  }
+  return renderSizeList(ctx);
+});
+
+/* ======= Items (category) ======= */
 bot.action(/^pv:(.+)$/, async (ctx) => {
   await ctx.answerCbQuery();
   const docId = ctx.match[1];
   const { sectionId, categoryId } = ctx.session.selected || {};
   if (!sectionId || !categoryId) return ctx.reply('❌ Kontekst yo‘q. /start');
-
   ctx.session.selected.docId = docId;
-  const doc = await itemsRef(sectionId, categoryId).doc(docId).get();
-  if (!doc.exists) return ctx.reply('❌ Mahsulot topilmadi.');
-  const data = doc.data();
+  ctx.session.selected.mode = 'prod';
+
+  const d = await itemsRefCat(sectionId, categoryId).doc(docId).get();
+  if (!d.exists) return ctx.reply('❌ Mahsulot topilmadi.');
+  const data = d.data();
   const { sectionTitle, categoryTitle } = await getTitles(sectionId, categoryId);
 
-  try {
-    await ctx.editMessageText(' ');
-  } catch {}
+  try { await ctx.editMessageText(' '); } catch {}
   try {
     await ctx.replyWithPhoto({ url: data.image }, {
       caption: productCardCaption(data, sectionTitle, categoryTitle),
       parse_mode: 'HTML',
-      ...actionKb
+      ...actionKbFor(!!data.available)
     });
   } catch {
-    await ctx.reply(productCardCaption(data, sectionTitle, categoryTitle), { parse_mode: 'HTML', ...actionKb });
+    await ctx.reply(productCardCaption(data, sectionTitle, categoryTitle), { parse_mode: 'HTML', ...actionKbFor(!!data.available) });
   }
 });
 
-/* Add new item under chosen category (static callback) */
+/* ======= Items (size) ======= */
+bot.action(/^pv2:(.+)$/, async (ctx) => {
+  await ctx.answerCbQuery();
+  const docId = ctx.match[1];
+  const { sectionId, categoryId, sizeId } = ctx.session.selected || {};
+  if (!sectionId || !categoryId || !sizeId) return ctx.reply('❌ Kontekst yo‘q. /start');
+
+  ctx.session.selected.docId = docId;
+  ctx.session.selected.mode = 'size';
+
+  const d = await itemsRefSize(sectionId, categoryId, sizeId).doc(docId).get();
+  if (!d.exists) return ctx.reply('❌ Mahsulot topilmadi.');
+  const data = d.data();
+  const { sectionTitle, categoryTitle, sizeLabel } = await getTitles(sectionId, categoryId, sizeId);
+
+  try { await ctx.editMessageText(' '); } catch {}
+  try {
+    await ctx.replyWithPhoto({ url: data.image }, {
+      caption: productCardCaption(data, sectionTitle, categoryTitle, sizeLabel),
+      parse_mode: 'HTML',
+      ...actionKbFor(!!data.available)
+    });
+  } catch {
+    await ctx.reply(productCardCaption(data, sectionTitle, categoryTitle, sizeLabel), { parse_mode: 'HTML', ...actionKbFor(!!data.available) });
+  }
+});
+
+/* Add product (both modes) */
 bot.action('padd', async (ctx) => {
   await ctx.answerCbQuery();
-  const { sectionId, categoryId } = ctx.session.selected || {};
+  const { sectionId, categoryId, mode, sizeId } = ctx.session.selected || {};
   if (!sectionId || !categoryId) return ctx.reply('❌ Avval kategoriya tanlang.');
+  if (mode === 'size' && !sizeId) return ctx.reply('❌ Avval o‘lchamni tanlang.');
+
   ctx.session.flow = 'product';
   ctx.session.product = {};
   ctx.session.state = S_TITLE;
   await ctx.reply('1/4 — Tovar nomini yuboring (title):');
 });
 
-/* ========= SAVE/DISCARD PRODUCT ========= */
+/* SAVE / DISCARD product */
 bot.action('save', async (ctx) => {
   await ctx.answerCbQuery();
   if (!(ctx.session.flow === 'product' && ctx.session.state === S_PREVIEW)) {
     return ctx.reply('Holat mos kelmadi. /start');
   }
-  const { sectionId, categoryId } = ctx.session.selected || {};
+  const { sectionId, categoryId, mode, sizeId } = ctx.session.selected || {};
   const draft = {
     ...ctx.session.product,
-    sectionId,
-    categoryId,
+    sectionId, categoryId,
+    sizeId: mode === 'size' ? sizeId : undefined,
     available: true,
     createdAt: admin.firestore.FieldValue.serverTimestamp()
   };
@@ -508,7 +760,11 @@ bot.action('save', async (ctx) => {
     return ctx.editMessageCaption({ caption: '❌ Validatsiya xatosi. /start dan qayta urining.' });
   }
   try {
-    await itemsRef(sectionId, categoryId).add(parsed.data);
+    if (mode === 'size') {
+      await itemsRefSize(sectionId, categoryId, sizeId).add(parsed.data);
+    } else {
+      await itemsRefCat(sectionId, categoryId).add(parsed.data);
+    }
     await ctx.editMessageCaption({ caption: `✅ Saqlandi!`, parse_mode: 'HTML' });
   } catch (e) {
     await ctx.editMessageCaption({ caption: `❌ Saqlashda xatolik: ${String(e)}`, parse_mode: 'HTML' });
@@ -516,8 +772,9 @@ bot.action('save', async (ctx) => {
     ctx.session.state = undefined;
     ctx.session.product = undefined;
   }
-  const list = await fetchItems(sectionId, categoryId, 30);
-  await ctx.reply('Mahsulotlar (tanlang) yoki yangi tovar qo‘shing:', itemsKb(sectionId, categoryId, list));
+
+  if (mode === 'size') return renderSizeView(ctx);
+  return renderCategoryItems(ctx);
 });
 
 bot.action('discard', async (ctx) => {
@@ -526,52 +783,54 @@ bot.action('discard', async (ctx) => {
   ctx.session.state = undefined;
   ctx.session.product = undefined;
 
-  const { sectionId, categoryId } = ctx.session.selected || {};
-  if (sectionId && categoryId) {
-    const list = await fetchItems(sectionId, categoryId, 30);
-    await ctx.reply('Mahsulotlar (tanlang) yoki yangi tovar qo‘shing:', itemsKb(sectionId, categoryId, list));
-  } else {
-    await ctx.reply('Yana nima qilamiz?', mainMenu());
-  }
+  const { mode } = ctx.session.selected || {};
+  if (mode === 'size') return renderSizeView(ctx);
+  return renderCategoryItems(ctx);
 });
 
-/* ========= ITEM ACTIONS ========= */
+/* ======= PRODUCT ACTIONS (delete/toggle) ======= */
 bot.action('prod:delete', async (ctx) => {
   await ctx.answerCbQuery();
-  const { sectionId, categoryId, docId } = ctx.session.selected || {};
+  const { sectionId, categoryId, docId, mode, sizeId } = ctx.session.selected || {};
   if (!sectionId || !categoryId || !docId) return ctx.reply('❌ Kontekst yo‘q. /start');
   try {
-    await itemsRef(sectionId, categoryId).doc(docId).delete();
-    await ctx.editMessageCaption({ caption: '🗑️ O‘chirildi.', parse_mode: 'HTML' }).catch(() => {});
+    if (mode === 'size' && sizeId) await itemsRefSize(sectionId, categoryId, sizeId).doc(docId).delete();
+    else await itemsRefCat(sectionId, categoryId).doc(docId).delete();
   } catch (e) {
     await ctx.reply(`❌ O‘chirishda xatolik: ${String(e)}`);
   }
-  const list = await fetchItems(sectionId, categoryId, 30);
-  await ctx.reply('Mahsulotlar (tanlang) yoki yangi tovar qo‘shing:', itemsKb(sectionId, categoryId, list));
+  if (mode === 'size') return renderSizeView(ctx, true);
+  return renderCategoryItems(ctx, true);
 });
 
-bot.action('prod:na', async (ctx) => {
+bot.action('prod:toggle', async (ctx) => {
   await ctx.answerCbQuery();
-  const { sectionId, categoryId, docId } = ctx.session.selected || {};
+  const { sectionId, categoryId, docId, mode, sizeId } = ctx.session.selected || {};
   if (!sectionId || !categoryId || !docId) return ctx.reply('❌ Kontekst yo‘q. /start');
+
   try {
-    await itemsRef(sectionId, categoryId).doc(docId).set({ available: false }, { merge: true });
-    const doc = await itemsRef(sectionId, categoryId).doc(docId).get();
-    const data = doc.data();
-    const { sectionTitle, categoryTitle } = await getTitles(sectionId, categoryId);
-    try {
-      await ctx.editMessageCaption({ caption: productCardCaption(data, sectionTitle, categoryTitle), parse_mode: 'HTML' });
-    } catch {
-      await ctx.reply(productCardCaption(data, sectionTitle, categoryTitle), { parse_mode: 'HTML', ...actionKb });
+    if (mode === 'size' && sizeId) {
+      const ref = itemsRefSize(sectionId, categoryId, sizeId).doc(docId);
+      const snap = await ref.get();
+      const cur = !!snap.data()?.available;
+      await ref.set({ available: !cur }, { merge: true });
+    } else {
+      const ref = itemsRefCat(sectionId, categoryId).doc(docId);
+      const snap = await ref.get();
+      const cur = !!snap.data()?.available;
+      await ref.set({ available: !cur }, { merge: true });
     }
   } catch (e) {
     await ctx.reply(`❌ Belgilashda xatolik: ${String(e)}`);
   }
+
+  if (mode === 'size') return renderSizeView(ctx, true);
+  return renderCategoryItems(ctx, true);
 });
 
 /* ========= BOOT ========= */
 async function seed() {
-  const metaRef = db.collection('meta').doc('catalogSeed_productsTree');
+  const metaRef = db.collection('meta').doc('catalogSeed_productsTree_v4');
   const meta = await metaRef.get();
   if (!meta.exists) console.log('Seeding catalog...');
   await seedCatalogIfNeeded();
