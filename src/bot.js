@@ -17,122 +17,81 @@ if (!admin.apps.length) {
   const cred = JSON.parse(fs.readFileSync(FIREBASE_CREDENTIALS, 'utf-8'));
   admin.initializeApp({ credential: admin.credential.cert(cred) });
 }
+// init'dan keyin:
 const db = admin.firestore();
+db.settings({ ignoreUndefinedProperties: true });
+
 
 /* ========= STATIC CATALOG ========= */
 const CATALOG = [
-  {
-    id: 'listovye-materialy',
-    title: 'Листовые материалы',
-    categories: [
-      { id: 'pvh-yilong', title: 'ПВХ YiLong' },
-      { id: 'orgsteklo-yilong', title: 'Оргстекло YiLong' },
-      { id: 'pvc-yilong', title: 'PVC YiLong' },
-      { id: 'akril-jun-shang', title: 'Акрил JUN SHANG' },
-      { id: 'roumark-gravirovka', title: 'Роумарк (пластик для гравировки)' },
-      { id: 'alyukobond', title: 'Алюкобонд' },
-      { id: 'penokarton', title: 'Пенокартон' }
-    ]
-  },
-  {
-    id: 'rulonnye-materialy',
-    title: 'Рулонные материалы',
-    categories: [
-      { id: 'banner-tkan', title: 'Баннерная ткань' },
-      { id: 'materialy-dlya-pechati', title: 'Материалы для печати' },
-      { id: 'tentovaya-tkan', title: 'Тентовая ткань' },
-      { id: 'plenki-laminirovanie', title: 'Пленки для ламинирования' },
-      { id: 'cvetnaya-samokley-vinil', title: 'Цветная самоклеющаяся виниловая пленка' },
-      { id: 'montazhnye-plenki', title: 'Монтажные пленки' },
-      { id: 'vitrajnye-plenki', title: 'Витражные пленки' },
-      { id: 'magnitnyj-vinil', title: 'Магнитный винил' },
-      { id: 'oboi-dlya-pechati', title: 'Обои для печати' }
-    ]
-  },
-  {
-    id: 'istochniki-sveta',
-    title: 'Источники света (светодиоды, лампы и пр.)',
-    categories: [
-      { id: 'led-prozhektory', title: 'LED прожекторы (соффиты)' },
-      { id: 'moduli-svetodiodnye', title: 'Модули светодиодные' },
-      { id: 'svetod-lenty', title: 'Светодиодные ленты' },
-      { id: 'svetod-linejki-zhestkaya-osnova', title: 'Светодиодные линейки на жесткой основе' },
-      { id: 'duralajt', title: 'Дюралайт светодиодный' },
-      { id: 'svetilnik', title: 'Светильник' },
-      { id: 'gibkij-neon', title: 'Гибкий неон светодиодный' }
-    ]
-  },
-  {
-    id: 'transformatory-i-upravlenie',
-    title: 'Трансформаторы и источники управления',
-    categories: [
-      { id: 'transformatory-vnutr-naruzh', title: 'Трансформаторы (внутренние и наружные)' },
-      { id: 'kontrollery-dimmery-usiliteli', title: 'Контроллеры, диммеры, усилители' }
-    ]
-  },
-  {
-    id: 'chernila-kraski',
-    title: 'Чернила (краски)',
-    categories: [
-      { id: 'solvent-kraski', title: 'Сольвентные краски' },
-      { id: 'ecosolvent-kraski', title: 'Экосольвентные краски' }
-    ]
-  },
-  {
-    id: 'reklamno-vystavochnoe',
-    title: 'Рекламное и выставочное оборудование',
-    categories: [
-      { id: 'pop-up-stendy', title: 'Поп-ап стенды (pop up, пресс-стены)' },
-      { id: 'x-konstrukcii', title: 'X-конструкции, x-баннера, паучки' },
-      { id: 'roll-up', title: 'Ролл-стенды roll up' },
-      { id: 'promostoly', title: 'Промостолы, промостойки' },
-      { id: 'flagchiki-flagi', title: 'Флажочки (флаги)' },
-      { id: 'posm-raznoe', title: 'POSM материалы (разное)' },
-      { id: 'bukletnicy', title: 'Буклетницы' }
-    ]
-  },
-  {
-    id: 'alyuminievye-profily',
-    title: 'Алюминиевые профиля и комплектующие',
-    categories: [
-      { id: 'profily-alyuminievye', title: 'Профиля алюминиевые' },
-      { id: 'komplektuyushchie-dlya-profilya', title: 'Комплектующие для профиля' },
-      { id: 'profil-dlya-lent', title: 'Алюминиевый профиль для светодиодных лент' }
-    ]
-  },
-  {
-    id: 'kleevye-resheniya',
-    title: 'Клеевые решения (скотч, клей)',
-    categories: [
-      { id: 'skotch', title: 'Клеевые решения (скотч)' },
-      { id: 'klej', title: 'Клей' }
-    ]
-  },
-  {
-    id: 'metal-i-plast-furnitura',
-    title: 'Металлическая и пластиковая фурнитура',
-    categories: [
-      { id: 'kajma-plastikovaya', title: 'Кайма пластиковая' },
-      { id: 'metal-furnitura', title: 'Металлическая фурнитура' },
-      { id: 'neodimovye-magnity', title: 'Неодимовые магниты' }
-    ]
-  },
-  {
-    id: 'instrumenty',
-    title: 'Инструменты',
-    categories: [
-      { id: 'ruchnye-instrumenty', title: 'Ручные инструменты' },
-      { id: 'postpechatnye-instr', title: 'Постпечатные инструменты' }
-    ]
-  },
-  {
-    id: 'frezy-i-gravery',
-    title: 'Фрезы и граверы',
-    categories: [
-      { id: 'frezy', title: 'Фрезы' },
-      { id: 'gravery', title: 'Граверы' }
-    ]
-  }
+  { id: 'listovye-materialy', title: 'Листовые материалы', categories: [
+    { id: 'pvh-yilong', title: 'ПВХ YiLong' },
+    { id: 'orgsteklo-yilong', title: 'Оргстекло YiLong' },
+    { id: 'pvc-yilong', title: 'PVC YiLong' },
+    { id: 'akril-jun-shang', title: 'Акрил JUN SHANG' },
+    { id: 'roumark-gravirovka', title: 'Роумарк (пластик для гравировки)' },
+    { id: 'alyukobond', title: 'Алюкобонд' },
+    { id: 'penokarton', title: 'Пенокартон' },
+  ]},
+  { id: 'rulonnye-materialy', title: 'Рулонные материалы', categories: [
+    { id: 'banner-tkan', title: 'Баннерная ткань' },
+    { id: 'materialy-dlya-pechati', title: 'Материалы для печати' },
+    { id: 'tentovaya-tkan', title: 'Тентовая ткань' },
+    { id: 'plenki-laminirovanie', title: 'Пленки для ламинирования' },
+    { id: 'cvetnaya-samokley-vinil', title: 'Цветная самоклеющаяся виниловая пленка' },
+    { id: 'montazhnye-plenki', title: 'Монтажные пленки' },
+    { id: 'vitrajnye-plenki', title: 'Витражные пленки' },
+    { id: 'magnitnyj-vinil', title: 'Магнитный винил' },
+    { id: 'oboi-dlya-pechati', title: 'Обои для печати' },
+  ]},
+  { id: 'istochniki-sveta', title: 'Источники света (светодиоды, лампы и пр.)', categories: [
+    { id: 'led-prozhektory', title: 'LED прожекторы (соффиты)' },
+    { id: 'moduli-svetodiodnye', title: 'Модули светодиодные' },
+    { id: 'svetod-lenty', title: 'Светодиодные ленты' },
+    { id: 'svetod-linejki-zhestkaya-osnova', title: 'Светодиодные линейки на жесткой основе' },
+    { id: 'duralajt', title: 'Дюралайт светодиодный' },
+    { id: 'svetilnik', title: 'Светильник' },
+    { id: 'gibkij-neon', title: 'Гибкий неон светодиодный' },
+  ]},
+  { id: 'transformatory-i-upravlenie', title: 'Трансформаторы и источники управления', categories: [
+    { id: 'transformatory-vnutr-naruzh', title: 'Трансформаторы (внутренние и наружные)' },
+    { id: 'kontrollery-dimmery-usiliteli', title: 'Контроллеры, диммеры, усилители' },
+  ]},
+  { id: 'chernila-kraski', title: 'Чернила (краски)', categories: [
+    { id: 'solvent-kraski', title: 'Сольвентные краски' },
+    { id: 'ecosolvent-kraski', title: 'Экосольвентные краски' },
+  ]},
+  { id: 'reklamno-vystavochnoe', title: 'Рекламное и выставочное оборудование', categories: [
+    { id: 'pop-up-stendy', title: 'Поп-ап стенды (pop up, пресс-стены)' },
+    { id: 'x-konstrukcii', title: 'X-конструкции, x-баннера, паучки' },
+    { id: 'roll-up', title: 'Ролл-стенды roll up' },
+    { id: 'promostoly', title: 'Промостолы, промостойки' },
+    { id: 'flagchiki-flagi', title: 'Флажочки (флаги)' },
+    { id: 'posm-raznoe', title: 'POSM материалы (разное)' },
+    { id: 'bukletnicy', title: 'Буклетницы' },
+  ]},
+  { id: 'alyuminievye-profily', title: 'Алюминиевые профиля и комплектующие', categories: [
+    { id: 'profily-alyuminievye', title: 'Профиля алюминиевые' },
+    { id: 'komplektuyushchie-dlya-profilya', title: 'Комплектующие для профиля' },
+    { id: 'profil-dlya-lent', title: 'Алюминиевый профиль для светодиодных лент' },
+  ]},
+  { id: 'kleevye-resheniya', title: 'Клеевые решения (скотч, клей)', categories: [
+    { id: 'skotch', title: 'Клеевые решения (скотч)' },
+    { id: 'klej', title: 'Клей' },
+  ]},
+  { id: 'metal-i-plast-furnitura', title: 'Металлическая и пластиковая фурнитура', categories: [
+    { id: 'kajma-plastikovaya', title: 'Кайма пластиковая' },
+    { id: 'metal-furnitura', title: 'Металлическая фурнитура' },
+    { id: 'neodimovye-magnity', title: 'Неодимовые магниты' },
+  ]},
+  { id: 'instrumenty', title: 'Инструменты', categories: [
+    { id: 'ruchnye-instrumenty', title: 'Ручные инструменты' },
+    { id: 'postpechatnye-instr', title: 'Постпечатные инструменты' },
+  ]},
+  { id: 'frezy-i-gravery', title: 'Фрезы и граверы', categories: [
+    { id: 'frezy', title: 'Фрезы' },
+    { id: 'gravery', title: 'Граверы' },
+  ]},
 ];
 
 /* ========= VALIDATION ========= */
@@ -163,12 +122,13 @@ const SizeSchema = z.object({
 const bot = new Telegraf(BOT_TOKEN);
 bot.use(session({
   defaultSession: () => ({
-    flow: undefined,           // 'product' | 'banner'
-    state: undefined,          // S_* , B_* , CAT_IMAGE, SZ_NAME, SZ_SIZE
-    product: undefined,        // draft
-    banner: undefined,         // draft
-    sizeDraft: undefined,      // {name,size}
-    selected: undefined        // { sectionId, categoryId, mode?, sizeId?, docId?, catImage? }
+    flow: undefined,
+    state: undefined,
+    product: undefined,
+    banner: undefined,
+    sizeDraft: undefined,
+    selected: undefined,   // { sectionId, categoryId, mode?, sizeId?, docId?, catImage? }
+    prefer: {}             // rejim eslab qolish
   })
 }));
 bot.catch((err) => console.error('Telegraf error:', err));
@@ -239,7 +199,6 @@ function sizeViewFullKb(sectionId, categoryId, sizeId, items) {
   rows.push([Markup.button.callback('⬅️ Orqaga (o‘lchamlar)', 'back:sz')]);
   return Markup.inlineKeyboard(rows);
 }
-/* 🔧 LOST HELPER — sizesKb (o‘lchamlar ro‘yxati) */
 function sizesKb(sectionId, categoryId, sizes) {
   const rows = sizes.map(s => [Markup.button.callback(`${s.name} — ${s.size}`, `szv:${s.id}`)]);
   rows.push([Markup.button.callback('➕ O‘lcham qo‘shish', 'szadd')]);
@@ -322,28 +281,38 @@ const CAT_IMAGE = 'CAT_IMAGE';
 const SZ_NAME = 'SZ_NAME';
 const SZ_SIZE = 'SZ_SIZE';
 
+/* ========= PREFER HELPERS ========= */
+function getPref(ctx, sectionId, categoryId) {
+  return ctx.session?.prefer?.[sectionId]?.[categoryId];
+}
+function setPref(ctx, sectionId, categoryId, mode) {
+  ctx.session.prefer ??= {};
+  ctx.session.prefer[sectionId] ??= {};
+  ctx.session.prefer[sectionId][categoryId] = mode; // 'prod' | 'size'
+}
+
 /* ========= COMMANDS ========= */
 bot.start(async (ctx) => {
   await ctx.reply('Salom! 👋', mainMenu());
 });
 bot.command('cancel', async (ctx) => {
-  ctx.session = { flow: undefined, state: undefined, product: undefined, banner: undefined, sizeDraft: undefined, selected: undefined };
+  ctx.session = { flow: undefined, state: undefined, product: undefined, banner: undefined, sizeDraft: undefined, selected: undefined, prefer: {} };
   await ctx.reply('Bekor qilindi.', mainMenu());
 });
 
 /* ========= TEXT HANDLER ========= */
 bot.on('text', async (ctx, next) => {
   if (!isAdmin(ctx)) return ctx.reply('Sizda ruxsat yo‘q.');
-  ctx.session ??= { flow: undefined, state: undefined, product: undefined, banner: undefined, sizeDraft: undefined, selected: undefined };
+  ctx.session ??= { flow: undefined, state: undefined, product: undefined, banner: undefined, sizeDraft: undefined, selected: undefined, prefer: {} };
   const txt = (ctx.message?.text || '').trim();
 
   if (txt === '🛒 Product qo‘shish') {
-    ctx.session = { flow: 'product', state: undefined, product: undefined, banner: undefined, sizeDraft: undefined, selected: undefined };
+    ctx.session = { flow: 'product', state: undefined, product: undefined, banner: undefined, sizeDraft: undefined, selected: undefined, prefer: ctx.session.prefer || {} };
     const sections = await fetchSections();
     return ctx.reply('Bo‘limni tanlang:', sectionsKb(sections));
   }
   if (txt === '🖼 Banner qo‘shish') {
-    ctx.session = { flow: 'banner', state: B_IMAGE, product: undefined, banner: {}, sizeDraft: undefined, selected: undefined };
+    ctx.session = { flow: 'banner', state: B_IMAGE, product: undefined, banner: {}, sizeDraft: undefined, selected: undefined, prefer: ctx.session.prefer || {} };
     return ctx.reply('Banner uchun rasm yuboring (foto yoki http/https URL).');
   }
 
@@ -374,9 +343,10 @@ bot.on('text', async (ctx, next) => {
       });
       await ctx.reply('✅ Banner saqlandi!', mainMenu());
     } catch (e) {
+      console.error('Banner save error:', e);
       await ctx.reply(`❌ Saqlashda xatolik: ${String(e)}`);
     } finally {
-      ctx.session = { flow: undefined, state: undefined, product: undefined, banner: undefined, sizeDraft: undefined, selected: undefined };
+      ctx.session = { flow: undefined, state: undefined, product: undefined, banner: undefined, sizeDraft: undefined, selected: undefined, prefer: ctx.session.prefer || {} };
     }
     return;
   }
@@ -388,7 +358,7 @@ bot.on('text', async (ctx, next) => {
     await categoriesRef(sectionId).doc(categoryId).set({ image: txt }, { merge: true });
     ctx.session.selected.catImage = txt;
     ctx.session.state = undefined;
-    return routeAfterCategorySelection(ctx);
+    return routeAfterCategorySelection(ctx); // auto
   }
 
   // Size add flow
@@ -553,18 +523,38 @@ async function ensureCategoryImageOrAsk(ctx, sectionId, categoryId) {
   await ctx.editMessageText('Ushbu kategoriya uchun rasm yuboring (foto yoki http/https URL).');
   return false;
 }
-async function routeAfterCategorySelection(ctx) {
+
+/* Router (prefer → auto open) */
+async function routeAfterCategorySelection(ctx, { forceMode } = {}) {
   const { sectionId, categoryId } = ctx.session.selected || {};
-  const sizesSnap = await sizesRef(sectionId, categoryId).limit(1).get();
-  const itemsSnap = await itemsRefCat(sectionId, categoryId).limit(1).get();
-  if (!sizesSnap.empty) {
-    ctx.session.selected.mode = 'size';
-    return renderSizeList(ctx);
-  }
-  if (!itemsSnap.empty) {
+  if (!sectionId || !categoryId) return;
+
+  const prefer = forceMode || getPref(ctx, sectionId, categoryId);
+  if (prefer === 'prod') {
     ctx.session.selected.mode = 'prod';
-    return renderCategoryItems(ctx);
+    return renderCategoryItems(ctx, true);
   }
+  if (prefer === 'size') {
+    ctx.session.selected.mode = 'size';
+    return renderSizeList(ctx, true);
+  }
+
+  const [sizesSnap, itemsSnap] = await Promise.all([
+    sizesRef(sectionId, categoryId).limit(1).get(),
+    itemsRefCat(sectionId, categoryId).limit(1).get()
+  ]);
+  const hasSizes = !sizesSnap.empty;
+  const hasItems = !itemsSnap.empty;
+
+  if (hasItems) {
+    ctx.session.selected.mode = 'prod';
+    return renderCategoryItems(ctx, true);
+  }
+  if (hasSizes) {
+    ctx.session.selected.mode = 'size';
+    return renderSizeList(ctx, true);
+  }
+
   ctx.session.selected.mode = undefined;
   return ctx.reply(
     'Rejimni tanlang:',
@@ -586,14 +576,18 @@ bot.action(/^cat:([^:]+):([^:]+)$/, async (ctx) => {
   await routeAfterCategorySelection(ctx);
 });
 
-/* Manual mode choose (faqat bo‘sh kategoriyada) */
+/* Manual mode choose (sessiyada saqlaymiz) */
 bot.action('md:p', async (ctx) => {
   await ctx.answerCbQuery();
+  const { sectionId, categoryId } = ctx.session.selected || {};
+  setPref(ctx, sectionId, categoryId, 'prod');
   ctx.session.selected.mode = 'prod';
   return renderCategoryItems(ctx, true);
 });
 bot.action('md:s', async (ctx) => {
   await ctx.answerCbQuery();
+  const { sectionId, categoryId } = ctx.session.selected || {};
+  setPref(ctx, sectionId, categoryId, 'size');
   ctx.session.selected.mode = 'size';
   return renderSizeList(ctx, true);
 });
@@ -602,21 +596,21 @@ bot.action('md:s', async (ctx) => {
 async function renderCategoryItems(ctx, edit = false) {
   const { sectionId, categoryId } = ctx.session.selected || {};
   const list = await fetchItemsCat(sectionId, categoryId, 30);
+  const kb = itemsKb(sectionId, categoryId, list);
   if (edit) {
-    try { await ctx.editMessageText('Mahsulotlar (tanlang) yoki yangi tovar qo‘shing:', itemsKb(sectionId, categoryId, list)); return; }
-    catch {}
+    try { await ctx.editMessageText('Mahsulotlar (tanlang) yoki yangi tovar qo‘shing:', kb); return; } catch {}
   }
-  await ctx.reply('Mahsulotlar (tanlang) yoki yangi tovar qo‘shing:', itemsKb(sectionId, categoryId, list));
+  await ctx.reply('Mahsulotlar (tanlang) yoki yangi tovar qo‘shing:', kb);
 }
 
 async function renderSizeList(ctx, edit = false) {
   const { sectionId, categoryId } = ctx.session.selected || {};
   const list = await fetchSizes(sectionId, categoryId, 50);
+  const kb = sizesKb(sectionId, categoryId, list);
   if (edit) {
-    try { await ctx.editMessageText('O‘lchamlar ro‘yxati:', sizesKb(sectionId, categoryId, list)); return; }
-    catch {}
+    try { await ctx.editMessageText('O‘lchamlar ro‘yxati:', kb); return; } catch {}
   }
-  await ctx.reply('O‘lchamlar ro‘yxati:', sizesKb(sectionId, categoryId, list));
+  await ctx.reply('O‘lchamlar ro‘yxati:', kb);
 }
 
 async function renderSizeView(ctx, editHeader = false) {
@@ -626,17 +620,15 @@ async function renderSizeView(ctx, editHeader = false) {
   const z = zDoc.data();
   const caption = `📐 <b>${z.name}</b>\n<b>O‘lcham:</b> ${z.size}\n`;
   const items = await fetchItemsSize(sectionId, categoryId, sizeId, 50);
+  const kb = sizeViewFullKb(sectionId, categoryId, sizeId, items);
 
   if (editHeader) {
     try { await ctx.editMessageText(' ').catch(()=>{}); } catch {}
   }
   try {
-    await ctx.replyWithPhoto(
-      { url: z.image },
-      { caption, parse_mode: 'HTML', ...sizeViewFullKb(sectionId, categoryId, sizeId, items) }
-    );
+    await ctx.replyWithPhoto({ url: z.image }, { caption, parse_mode: 'HTML', ...kb });
   } catch {
-    await ctx.reply(caption, { parse_mode: 'HTML', ...sizeViewFullKb(sectionId, categoryId, sizeId, items) });
+    await ctx.reply(caption, { parse_mode: 'HTML', ...kb });
   }
 }
 
@@ -670,6 +662,7 @@ bot.action('szdel', async (ctx) => {
     await sizesRef(sectionId, categoryId).doc(sizeId).delete();
     await ctx.reply('🗑️ O‘lcham o‘chirildi.');
   } catch (e) {
+    console.error('Size delete error:', e);
     await ctx.reply(`❌ O‘lchamni o‘chirishda xatolik: ${String(e)}`);
   }
   return renderSizeList(ctx);
@@ -728,7 +721,7 @@ bot.action(/^pv2:(.+)$/, async (ctx) => {
   }
 });
 
-/* Add product (both modes) */
+/* ======= Add product (both modes) ======= */
 bot.action('padd', async (ctx) => {
   await ctx.answerCbQuery();
   const { sectionId, categoryId, mode, sizeId } = ctx.session.selected || {};
@@ -741,38 +734,54 @@ bot.action('padd', async (ctx) => {
   await ctx.reply('1/4 — Tovar nomini yuboring (title):');
 });
 
-/* SAVE / DISCARD product */
+/* ======= SAVE / DISCARD product (PATCHED) ======= */
 bot.action('save', async (ctx) => {
   await ctx.answerCbQuery();
-  if (!(ctx.session.flow === 'product' && ctx.session.state === S_PREVIEW)) {
-    return ctx.reply('Holat mos kelmadi. /start');
-  }
+
+  // 1) sessiyadagi ma’lumotlardan draft yig‘amiz — holatga bog‘liq emas
   const { sectionId, categoryId, mode, sizeId } = ctx.session.selected || {};
+  const base = ctx.session.product || {};
   const draft = {
-    ...ctx.session.product,
+    title: base.title,
+    image: base.image,
+    price: base.price,
+    description: base.description,
+    available: true,
     sectionId, categoryId,
     sizeId: mode === 'size' ? sizeId : undefined,
-    available: true,
     createdAt: admin.firestore.FieldValue.serverTimestamp()
   };
+
+  // 2) validatsiya
   const parsed = ProductSchema.safeParse(draft);
   if (!parsed.success) {
-    return ctx.editMessageCaption({ caption: '❌ Validatsiya xatosi. /start dan qayta urining.' });
+    const msg = parsed.error.errors.map(e => `• ${e.path.join('.')}: ${e.message}`).join('\n');
+    try { await ctx.editMessageCaption({ caption: `❌ Validatsiya xatosi:\n${msg}`, parse_mode: 'HTML' }); } catch {}
+    return;
   }
+
+  // 3) saqlash
   try {
+    let ref;
     if (mode === 'size') {
-      await itemsRefSize(sectionId, categoryId, sizeId).add(parsed.data);
+      ref = await itemsRefSize(sectionId, categoryId, sizeId).add(parsed.data);
     } else {
-      await itemsRefCat(sectionId, categoryId).add(parsed.data);
+      ref = await itemsRefCat(sectionId, categoryId).add(parsed.data);
     }
-    await ctx.editMessageCaption({ caption: `✅ Saqlandi!`, parse_mode: 'HTML' });
+    console.log('Product saved:', ref.id, 'mode=', mode);
+
+    try { await ctx.editMessageCaption({ caption: `✅ Saqlandi!`, parse_mode: 'HTML' }); } catch {}
   } catch (e) {
-    await ctx.editMessageCaption({ caption: `❌ Saqlashda xatolik: ${String(e)}`, parse_mode: 'HTML' });
+    console.error('Product save error:', e);
+    try { await ctx.editMessageCaption({ caption: `❌ Saqlashda xatolik: ${String(e)}`, parse_mode: 'HTML' }); } catch {}
+    return;
   } finally {
     ctx.session.state = undefined;
     ctx.session.product = undefined;
   }
 
+  // 4) rejimni eslab qolamiz va ro‘yxatni yangilaymiz
+  setPref(ctx, sectionId, categoryId, mode === 'size' ? 'size' : 'prod');
   if (mode === 'size') return renderSizeView(ctx);
   return renderCategoryItems(ctx);
 });
@@ -797,6 +806,7 @@ bot.action('prod:delete', async (ctx) => {
     if (mode === 'size' && sizeId) await itemsRefSize(sectionId, categoryId, sizeId).doc(docId).delete();
     else await itemsRefCat(sectionId, categoryId).doc(docId).delete();
   } catch (e) {
+    console.error('Delete error:', e);
     await ctx.reply(`❌ O‘chirishda xatolik: ${String(e)}`);
   }
   if (mode === 'size') return renderSizeView(ctx, true);
@@ -821,6 +831,7 @@ bot.action('prod:toggle', async (ctx) => {
       await ref.set({ available: !cur }, { merge: true });
     }
   } catch (e) {
+    console.error('Toggle error:', e);
     await ctx.reply(`❌ Belgilashda xatolik: ${String(e)}`);
   }
 
@@ -829,14 +840,15 @@ bot.action('prod:toggle', async (ctx) => {
 });
 
 /* ========= BOOT ========= */
-async function seed() {
+async function seedCatalogIfNeededAndStart() {
   const metaRef = db.collection('meta').doc('catalogSeed_productsTree_v4');
   const meta = await metaRef.get();
   if (!meta.exists) console.log('Seeding catalog...');
   await seedCatalogIfNeeded();
 }
+
 async function main() {
-  await seed();
+  await seedCatalogIfNeededAndStart();
   await bot.launch();
   console.log('Bot ishga tushdi…');
 }
