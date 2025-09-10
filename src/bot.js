@@ -4,23 +4,27 @@ import admin from 'firebase-admin';
 import fs from 'node:fs';
 import { z } from 'zod';
 
+// --- optional fetch fallback for Node < 18 ---
+// import nodeFetch from 'node-fetch';
+const fetchFn = globalThis.fetch;
+
 /* ========= ENV / CONFIG ========= */
 const BOT_TOKEN = process.env.BOT_TOKEN || '';
 const FIREBASE_CREDENTIALS = process.env.FIREBASE_CREDENTIALS || './serviceAccountKey.json';
 const ADMIN_USER_ID = Number(process.env.ADMIN_USER_ID || '0');
+const IMGBB_API_KEY = process.env.IMGBB_API_KEY || '92f447e91c83252eedc95d323bf1b92a';
 
 if (!BOT_TOKEN) throw new Error('BOT_TOKEN .env ichida ko‘rsatilmagan');
 if (!fs.existsSync(FIREBASE_CREDENTIALS)) throw new Error('Firebase serviceAccountKey.json topilmadi');
+if (!IMGBB_API_KEY) throw new Error('IMGBB_API_KEY .env ichida ko‘rsatilmagan');
 
 /* ========= FIREBASE ========= */
 if (!admin.apps.length) {
   const cred = JSON.parse(fs.readFileSync(FIREBASE_CREDENTIALS, 'utf-8'));
   admin.initializeApp({ credential: admin.credential.cert(cred) });
 }
-// init'dan keyin:
 const db = admin.firestore();
 db.settings({ ignoreUndefinedProperties: true });
-
 
 /* ========= STATIC CATALOG ========= */
 const CATALOG = [
@@ -135,6 +139,36 @@ bot.catch((err) => console.error('Telegraf error:', err));
 
 /* ========= HELPERS ========= */
 const isAdmin = (ctx) => (ADMIN_USER_ID === 0) || ((ctx.from?.id ?? 0) === ADMIN_USER_ID);
+
+// imgbb upload helper (by external URL or base64 if needed)
+async function uploadToImgbbByUrl(imageUrl, name = 'tg_image') {
+  const body = new URLSearchParams();
+  body.append('image', imageUrl);      // imgbb URL-ni qabul qiladi
+  body.append('name', name);
+
+  const res = await fetchFn(`https://api.imgbb.com/1/upload?key=${IMGBB_API_KEY}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body
+  });
+
+  if (!res.ok) {
+    const t = await res.text().catch(()=> '');
+    throw new Error(`imgbb http ${res.status}: ${t}`);
+  }
+  const json = await res.json();
+  if (!json?.success) {
+    const msg = json?.error?.message || 'imgbb upload failed';
+    throw new Error(msg);
+  }
+  // display_url odatda hotlink uchun qulay
+  return json.data?.display_url || json.data?.url || imageUrl;
+}
+
+async function getTelegramFileUrl(ctx, fileId) {
+  const link = await ctx.telegram.getFileLink(fileId);
+  return String(link);
+}
 
 const mainMenu = () => Markup.keyboard([
   ['🛒 Product qo‘shish', '🖼 Banner qo‘shish']
@@ -316,7 +350,7 @@ bot.on('text', async (ctx, next) => {
     return ctx.reply('Banner uchun rasm yuboring (foto yoki http/https URL).');
   }
 
-  // Banner URL
+  // Banner URL (URL bo‘lsa — to‘g‘ridan saqlaymiz)
   if (ctx.session.flow === 'banner' && ctx.session.state === B_IMAGE) {
     if (!/^https?:\/\//.test(txt)) return ctx.reply('Iltimos, to‘g‘ri rasm URL (http/https) kiriting yoki foto yuboring.');
     ctx.session.banner.image = txt;
@@ -351,7 +385,7 @@ bot.on('text', async (ctx, next) => {
     return;
   }
 
-  // Category image text URL
+  // Category image text URL (URL bo‘lsa — to‘g‘ridan saqlaymiz)
   if (ctx.session.flow === 'product' && ctx.session.state === CAT_IMAGE) {
     if (!/^https?:\/\//.test(txt)) return ctx.reply('Kategoriya uchun to‘g‘ri rasm URL kiriting (http/https) yoki foto yuboring.');
     const { sectionId, categoryId } = ctx.session.selected || {};
@@ -380,17 +414,20 @@ bot.on('text', async (ctx, next) => {
     return renderSizeList(ctx);
   }
 
-  // Product form
+  // Product form (URL bo‘lsa shu yerda qabul qilinadi; RASM bo‘lsa photo handler ushlaydi)
   if (ctx.session.flow === 'product') {
     switch (ctx.session.state) {
       case S_TITLE:
         ctx.session.product = { ...(ctx.session.product||{}), title: txt };
         ctx.session.state = S_IMAGE;
-        return ctx.reply('2/4 — Rasm URL yuboring (http/https):');
+        return ctx.reply('2/4 — Rasm yuboring (foto yoki http/https URL).');
       case S_IMAGE:
+        if (!/^https?:\/\//.test(txt)) {
+          return ctx.reply('Rasm uchun http/https URL kiriting yoki oddiy rasmni foto sifatida yuboring.');
+        }
         ctx.session.product.image = txt;
         ctx.session.state = S_PRICE;
-        return ctx.reply('3/4 — Narxni yuboring (masalan: "от 2 500 ₸" yoki "2500 ₸"):');
+        return ctx.reply(`3/4 — Narxni yuboring (masalan: "2 500 so'm"):`);
       case S_PRICE:
         ctx.session.product.price = txt;
         ctx.session.state = S_DESC;
@@ -440,33 +477,51 @@ bot.on('text', async (ctx, next) => {
 bot.on('photo', async (ctx) => {
   if (!isAdmin(ctx)) return ctx.reply('Sizda ruxsat yo‘q.');
 
-  // Banner photo
+  // Banner photo => imgbb ga yuklab, display_url ni saqlash
   if (ctx.session.flow === 'banner' && ctx.session.state === B_IMAGE) {
     try {
       const best = ctx.message.photo.at(-1);
-      const link = await ctx.telegram.getFileLink(best.file_id);
-      ctx.session.banner.image = String(link);
+      const tgFileUrl = await getTelegramFileUrl(ctx, best.file_id);
+      const imgbbUrl = await uploadToImgbbByUrl(tgFileUrl, `banner_${best.file_unique_id || Date.now()}`);
+      ctx.session.banner.image = imgbbUrl;
       ctx.session.state = B_SECTION;
       const sections = await fetchSections();
       return ctx.reply('Banner qaysi bo‘limga tegishli?', sectionsKb(sections));
-    } catch {
-      return ctx.reply('Rasm linkini olishda xatolik. Boshqa foto yuboring yoki URL kiriting.');
+    } catch (e) {
+      console.error('Banner photo upload error:', e);
+      return ctx.reply('Rasmni yuklashda xatolik. Boshqa foto yuboring yoki URL kiriting.');
     }
   }
 
-  // Category image photo
+  // Category image photo => imgbb ga yuklab, kategoriyaga yozish
   if (ctx.session.flow === 'product' && ctx.session.state === CAT_IMAGE) {
     try {
       const best = ctx.message.photo.at(-1);
-      const link = await ctx.telegram.getFileLink(best.file_id);
-      const url = String(link);
+      const tgFileUrl = await getTelegramFileUrl(ctx, best.file_id);
+      const imgbbUrl = await uploadToImgbbByUrl(tgFileUrl, `category_${best.file_unique_id || Date.now()}`);
       const { sectionId, categoryId } = ctx.session.selected || {};
-      await categoriesRef(sectionId).doc(categoryId).set({ image: url }, { merge: true });
-      ctx.session.selected.catImage = url;
+      await categoriesRef(sectionId).doc(categoryId).set({ image: imgbbUrl }, { merge: true });
+      ctx.session.selected.catImage = imgbbUrl;
       ctx.session.state = undefined;
       return routeAfterCategorySelection(ctx);
-    } catch {
-      return ctx.reply('Rasm linkini olishda xatolik. Boshqa foto yuboring yoki URL kiriting.');
+    } catch (e) {
+      console.error('Category photo upload error:', e);
+      return ctx.reply('Rasmni yuklashda xatolik. Boshqa foto yuboring yoki URL kiriting.');
+    }
+  }
+
+  // Product form — S_IMAGE holatida foto yuborilsa => imgbb ga yuklab, product.image = display_url
+  if (ctx.session.flow === 'product' && ctx.session.state === S_IMAGE) {
+    try {
+      const best = ctx.message.photo.at(-1);
+      const tgFileUrl = await getTelegramFileUrl(ctx, best.file_id);
+      const imgbbUrl = await uploadToImgbbByUrl(tgFileUrl, `product_${best.file_unique_id || Date.now()}`);
+      ctx.session.product = { ...(ctx.session.product || {}), image: imgbbUrl };
+      ctx.session.state = S_PRICE;
+      return ctx.reply('3/4 — Narxni yuboring (masalan: "от 2 500 ₸" yoki "2500 ₸"):');
+    } catch (e) {
+      console.error('Product photo upload error:', e);
+      return ctx.reply('Rasmni yuklashda xatolik. Boshqa foto yuboring yoki URL kiriting.');
     }
   }
 });
@@ -520,7 +575,7 @@ async function ensureCategoryImageOrAsk(ctx, sectionId, categoryId) {
     return true;
   }
   ctx.session.state = CAT_IMAGE;
-  await ctx.editMessageText('Ushbu kategoriya uchun rasm yuboring (foto yoki http/https URL).');
+  await ctx.editMessageText('Ushbu kategoriya uchun rasm yuboring (foto — imgbb ga avtomatik yuklanadi, yoki http/https URL kiriting).');
   return false;
 }
 
@@ -734,11 +789,10 @@ bot.action('padd', async (ctx) => {
   await ctx.reply('1/4 — Tovar nomini yuboring (title):');
 });
 
-/* ======= SAVE / DISCARD product (PATCHED) ======= */
+/* ======= SAVE / DISCARD product ======= */
 bot.action('save', async (ctx) => {
   await ctx.answerCbQuery();
 
-  // 1) sessiyadagi ma’lumotlardan draft yig‘amiz — holatga bog‘liq emas
   const { sectionId, categoryId, mode, sizeId } = ctx.session.selected || {};
   const base = ctx.session.product || {};
   const draft = {
@@ -752,7 +806,6 @@ bot.action('save', async (ctx) => {
     createdAt: admin.firestore.FieldValue.serverTimestamp()
   };
 
-  // 2) validatsiya
   const parsed = ProductSchema.safeParse(draft);
   if (!parsed.success) {
     const msg = parsed.error.errors.map(e => `• ${e.path.join('.')}: ${e.message}`).join('\n');
@@ -760,7 +813,6 @@ bot.action('save', async (ctx) => {
     return;
   }
 
-  // 3) saqlash
   try {
     let ref;
     if (mode === 'size') {
@@ -780,7 +832,6 @@ bot.action('save', async (ctx) => {
     ctx.session.product = undefined;
   }
 
-  // 4) rejimni eslab qolamiz va ro‘yxatni yangilaymiz
   setPref(ctx, sectionId, categoryId, mode === 'size' ? 'size' : 'prod');
   if (mode === 'size') return renderSizeView(ctx);
   return renderCategoryItems(ctx);
