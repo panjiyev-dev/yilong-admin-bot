@@ -29,72 +29,67 @@ db.settings({ ignoreUndefinedProperties: true });
 /* ========= STATIC CATALOG ========= */
 const CATALOG = [
   { id: 'listovye-materialy', title: 'Листовые материалы', categories: [
-    { id: 'pvh-yilong', title: 'ПВХ YiLong' },
-    { id: 'orgsteklo-yilong', title: 'Оргстекло YiLong' },
-    { id: 'pvc-yilong', title: 'PVC YiLong' },
-    { id: 'akril-jun-shang', title: 'Акрил JUN SHANG' },
-    { id: 'roumark-gravirovka', title: 'Роумарк (пластик для гравировки)' },
-    { id: 'alyukobond', title: 'Алюкобонд' },
-    { id: 'penokarton', title: 'Пенокартон' },
+    { id: 'pvh-yilong', title: 'ПВХ Формекс' }, //1
+    { id: 'orgsteklo-yilong', title: 'Оргстекло YiLong' }, //2
+    { id: 'pvc-yilong', title: 'PVC YiLong' }, //3
+    { id: 'akril-jun-shang', title: 'Акрил XT Xin Tao' }, //4
+    { id: 'roumark-gravirovka', title: 'Роумарк (пластик для гравировки)' }, //5
+    { id: 'alyukobond', title: 'Алюкобонд' }, //6
+    { id: 'penokarton', title: 'Пенокартон' }, //7
   ]},
   { id: 'rulonnye-materialy', title: 'Рулонные материалы', categories: [
-    { id: 'banner-tkan', title: 'Баннерная ткань' },
-    { id: 'materialy-dlya-pechati', title: 'Материалы для печати' },
-    { id: 'tentovaya-tkan', title: 'Тентовая ткань' },
-    { id: 'plenki-laminirovanie', title: 'Пленки для ламинирования' },
-    { id: 'cvetnaya-samokley-vinil', title: 'Цветная самоклеющаяся виниловая пленка' },
-    { id: 'montazhnye-plenki', title: 'Монтажные пленки' },
-    { id: 'vitrajnye-plenki', title: 'Витражные пленки' },
-    { id: 'magnitnyj-vinil', title: 'Магнитный винил' },
-    { id: 'oboi-dlya-pechati', title: 'Обои для печати' },
+    { id: 'banner-tkan', title: 'Баннерная ткань' }, //1
+    { id: 'cvetnaya-samokley-vinil', title: 'Цветная самоклеющаяся виниловая пленка' }, //2
+    { id: 'montazhnye-plenki', title: 'Монтажные пленки' }, //3
+    { id: 'vitrajnye-plenki', title: 'Витражные пленки' }, //4
+    { id: 'magnitnyj-vinil', title: 'Магнитный винил' }, //5
+    { id: 'beklit', title: 'Беклит' }, //6
+    { id: 'xolst', title: 'Холст' }, //7
+    { id: 'tkan-dlya-sublimatsionoy-pechati', title: 'Ткань для сублимационной печати' }, //8
+    { id: 'pechatniy-orakal', title: 'Печатний оракал' }, //9
   ]},
   { id: 'istochniki-sveta', title: 'Источники света (светодиоды, лампы и пр.)', categories: [
-    { id: 'led-prozhektory', title: 'LED прожекторы (соффиты)' },
-    { id: 'moduli-svetodiodnye', title: 'Модули светодиодные' },
-    { id: 'svetod-lenty', title: 'Светодиодные ленты' },
-    { id: 'svetod-linejki-zhestkaya-osnova', title: 'Светодиодные линейки на жесткой основе' },
-    { id: 'duralajt', title: 'Дюралайт светодиодный' },
-    { id: 'svetilnik', title: 'Светильник' },
-    { id: 'gibkij-neon', title: 'Гибкий неон светодиодный' },
+    { id: 'led-prozhektory', title: 'LED прожекторы (соффиты)' }, //1
+    { id: 'moduli-svetodiodnye', title: 'Модули светодиодные' }, //2
+    { id: 'svetod-lenty', title: 'Светодиодные ленты' }, //3
+    { id: 'svetod-linejki-zhestkaya-osnova', title: 'Светодиодные линейки на жесткой основе' }, //4
+    { id: 'duralajt', title: 'Дюралайт светодиодный' }, //5
+    { id: 'svetilnik', title: 'Светильник' }, //6
+    { id: 'gibkij-neon', title: 'Гибкий неон светодиодный' }, //7
   ]},
   { id: 'transformatory-i-upravlenie', title: 'Трансформаторы и источники управления', categories: [
-    { id: 'transformatory-vnutr-naruzh', title: 'Трансформаторы (внутренние и наружные)' },
-    { id: 'kontrollery-dimmery-usiliteli', title: 'Контроллеры, диммеры, усилители' },
+    { id: 'transformatory-naruzh', title: 'Трансформаторы (наружные)' }, //1
+    { id: 'transformatory-vnutr', title: 'Трансформаторы (внутренние)' }, //2
   ]},
   { id: 'chernila-kraski', title: 'Чернила (краски)', categories: [
-    { id: 'solvent-kraski', title: 'Сольвентные краски' },
-    { id: 'ecosolvent-kraski', title: 'Экосольвентные краски' },
+    { id: 'solvent-kraski', title: 'Сольвентные краски' }, //1
+    { id: 'ecosolvent-kraski', title: 'Экосольвентные краски' }, //2
   ]},
   { id: 'reklamno-vystavochnoe', title: 'Рекламное и выставочное оборудование', categories: [
-    { id: 'pop-up-stendy', title: 'Поп-ап стенды (pop up, пресс-стены)' },
-    { id: 'x-konstrukcii', title: 'X-конструкции, x-баннера, паучки' },
-    { id: 'roll-up', title: 'Ролл-стенды roll up' },
-    { id: 'promostoly', title: 'Промостолы, промостойки' },
-    { id: 'flagchiki-flagi', title: 'Флажочки (флаги)' },
-    { id: 'posm-raznoe', title: 'POSM материалы (разное)' },
-    { id: 'bukletnicy', title: 'Буклетницы' },
+    { id: 'pop-up-stendy', title: 'Поп-ап стенды (pop up, пресс-стены)' }, //1
+    { id: 'roll-up', title: 'Ролл-стенды roll up и паучки' }, //2
+    { id: 'flagchiki-flagi', title: 'Флажочки (флаги)' }, //3
+    { id: 'promostoly', title: 'Промостолы, промостойки' }, //4
   ]},
   { id: 'alyuminievye-profily', title: 'Алюминиевые профиля и комплектующие', categories: [
-    { id: 'profily-alyuminievye', title: 'Профиля алюминиевые' },
-    { id: 'komplektuyushchie-dlya-profilya', title: 'Комплектующие для профиля' },
-    { id: 'profil-dlya-lent', title: 'Алюминиевый профиль для светодиодных лент' },
+    { id: 'profil-dlya-lent', title: 'Алюминиевый профиль для светодиодных лент' }, //1
   ]},
   { id: 'kleevye-resheniya', title: 'Клеевые решения (скотч, клей)', categories: [
-    { id: 'skotch', title: 'Клеевые решения (скотч)' },
-    { id: 'klej', title: 'Клей' },
+    { id: 'skotch', title: 'Двусторонний ленты (скотч)' }, //1
+    { id: 'klej', title: 'Клей' }, //2
   ]},
   { id: 'metal-i-plast-furnitura', title: 'Металлическая и пластиковая фурнитура', categories: [
-    { id: 'kajma-plastikovaya', title: 'Кайма пластиковая' },
-    { id: 'metal-furnitura', title: 'Металлическая фурнитура' },
-    { id: 'neodimovye-magnity', title: 'Неодимовые магниты' },
+    { id: 'distantsionnye-derjateli-serebro', title: 'Дистанционные держатели (серебро)' }, //1
   ]},
   { id: 'instrumenty', title: 'Инструменты', categories: [
-    { id: 'ruchnye-instrumenty', title: 'Ручные инструменты' },
-    { id: 'postpechatnye-instr', title: 'Постпечатные инструменты' },
+    { id: 'ruchnye-instrumenty', title: 'Ручные инструменты Hoji' }, //1
+    { id: 'lezviya-dlya-nozhey', title: 'Лезвия для ножей' },//2
+    { id: 'lyoversy-i-proboyniki', title: 'Люверсы и пробойники' },//3
+    { id: 'rakeli', title: 'Ракели' }, //4
   ]},
   { id: 'frezy-i-gravery', title: 'Фрезы и граверы', categories: [
-    { id: 'frezy', title: 'Фрезы' },
-    { id: 'gravery', title: 'Граверы' },
+    { id: 'frezy', title: 'Фрезы' }, //1
+    { id: 'gravery', title: 'Граверы' }, //2
   ]},
 ];
 
