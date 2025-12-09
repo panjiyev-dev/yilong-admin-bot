@@ -22,13 +22,13 @@ if (!IMGBB_API_KEY) throw new Error('IMGBB_API_KEY .env ichida ko‘rsatilmagan'
 if (!admin.apps.length) {
   let cred;
 
-  // Railway: FIREBASE_CREDENTIALS ichida to‘liq JSON bo‘lsa — o‘sha JSONni o‘qiymiz
+  // Railway: FIREBASE_CREDENTIALS ichida JSON bo'lsa — o‘sha JSONni o‘qiymiz
   if (FIREBASE_CREDENTIALS.trim().startsWith('{')) {
     cred = JSON.parse(FIREBASE_CREDENTIALS);
   } else {
-    // Local development: file orqali o‘qiladi
+    // Local development: agar fayl orqali ishlatilsa
     if (!fs.existsSync(FIREBASE_CREDENTIALS)) {
-      throw new Error('Firebase serviceAccountKey.json topilmadi');
+      throw new Error('Firebase serviceAccountKey.json topilmadi (LOCAL)');
     }
     cred = JSON.parse(fs.readFileSync(FIREBASE_CREDENTIALS, 'utf-8'));
   }
