@@ -15,7 +15,7 @@ const ADMIN_USER_ID = Number(process.env.ADMIN_USER_ID || '0');
 const IMGBB_API_KEY = process.env.IMGBB_API_KEY || '92f447e91c83252eedc95d323bf1b92a';
 
 if (!BOT_TOKEN) throw new Error('BOT_TOKEN .env ichida ko‘rsatilmagan');
-if (!fs.existsSync(FIREBASE_CREDENTIALS)) throw new Error('Firebase serviceAccountKey.json topilmadi');
+// if (!fs.existsSync(FIREBASE_CREDENTIALS)) throw new Error('Firebase serviceAccountKey.json topilmadi');
 if (!IMGBB_API_KEY) throw new Error('IMGBB_API_KEY .env ichida ko‘rsatilmagan');
 
 /* ========= FIREBASE ========= */
