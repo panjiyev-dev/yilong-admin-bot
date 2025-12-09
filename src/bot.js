@@ -20,11 +20,27 @@ if (!IMGBB_API_KEY) throw new Error('IMGBB_API_KEY .env ichida ko‘rsatilmagan'
 
 /* ========= FIREBASE ========= */
 if (!admin.apps.length) {
-  const cred = JSON.parse(fs.readFileSync(FIREBASE_CREDENTIALS, 'utf-8'));
-  admin.initializeApp({ credential: admin.credential.cert(cred) });
+  let cred;
+
+  // Railway: FIREBASE_CREDENTIALS ichida to‘liq JSON bo‘lsa — o‘sha JSONni o‘qiymiz
+  if (FIREBASE_CREDENTIALS.trim().startsWith('{')) {
+    cred = JSON.parse(FIREBASE_CREDENTIALS);
+  } else {
+    // Local development: file orqali o‘qiladi
+    if (!fs.existsSync(FIREBASE_CREDENTIALS)) {
+      throw new Error('Firebase serviceAccountKey.json topilmadi');
+    }
+    cred = JSON.parse(fs.readFileSync(FIREBASE_CREDENTIALS, 'utf-8'));
+  }
+
+  admin.initializeApp({
+    credential: admin.credential.cert(cred)
+  });
 }
+
 const db = admin.firestore();
 db.settings({ ignoreUndefinedProperties: true });
+
 
 /* ========= STATIC CATALOG ========= */
 const CATALOG = [
