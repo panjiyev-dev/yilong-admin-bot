@@ -22,14 +22,11 @@ if (!IMGBB_API_KEY) throw new Error('IMGBB_API_KEY .env ichida ko‘rsatilmagan'
 if (!admin.apps.length) {
   let cred;
 
-  // Railway: FIREBASE_CREDENTIALS ichida JSON bo'lsa — o‘sha JSONni o‘qiymiz
+  // Railway — FIREBASE_CREDENTIALS ENV ichida JSON mavjud
   if (FIREBASE_CREDENTIALS.trim().startsWith('{')) {
     cred = JSON.parse(FIREBASE_CREDENTIALS);
   } else {
-    // Local development: agar fayl orqali ishlatilsa
-    if (!fs.existsSync(FIREBASE_CREDENTIALS)) {
-      throw new Error('Firebase serviceAccountKey.json topilmadi (LOCAL)');
-    }
+    // Faqat LOCAL uchun
     cred = JSON.parse(fs.readFileSync(FIREBASE_CREDENTIALS, 'utf-8'));
   }
 
@@ -40,7 +37,6 @@ if (!admin.apps.length) {
 
 const db = admin.firestore();
 db.settings({ ignoreUndefinedProperties: true });
-
 
 /* ========= STATIC CATALOG ========= */
 const CATALOG = [
