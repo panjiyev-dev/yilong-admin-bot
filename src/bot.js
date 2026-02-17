@@ -14,20 +14,50 @@ const FIREBASE_CREDENTIALS = process.env.FIREBASE_CREDENTIALS || './serviceAccou
 const ADMIN_USER_ID = Number(process.env.ADMIN_USER_ID || '0');
 const IMGBB_API_KEY = process.env.IMGBB_API_KEY || '92f447e91c83252eedc95d323bf1b92a';
 
-if (!BOT_TOKEN) throw new Error('BOT_TOKEN .env ichida ko‘rsatilmagan');
-// if (!fs.existsSync(FIREBASE_CREDENTIALS)) throw new Error('Firebase serviceAccountKey.json topilmadi');
-if (!IMGBB_API_KEY) throw new Error('IMGBB_API_KEY .env ichida ko‘rsatilmagan');
+if (!BOT_TOKEN) throw new Error('BOT_TOKEN .env ichida ko\u2019rsatilmagan');
+if (!IMGBB_API_KEY) throw new Error('IMGBB_API_KEY .env ichida ko\u2019rsatilmagan');
 
 /* ========= FIREBASE ========= */
 if (!admin.apps.length) {
   let cred;
 
-  // Railway — FIREBASE_CREDENTIALS ENV ichida JSON mavjud
-  if (FIREBASE_CREDENTIALS.trim().startsWith('{')) {
-    cred = JSON.parse(FIREBASE_CREDENTIALS);
+  const raw = FIREBASE_CREDENTIALS.trim();
+
+  if (raw.startsWith('{')) {
+    // Railway — FIREBASE_CREDENTIALS ENV ichida JSON mavjud (to'g'ridan-to'g'ri yoki escape qilingan)
+    try {
+      cred = JSON.parse(raw);
+    } catch {
+      // Ba'zan Railway env qiymatida qo'shtirnoqlar escape qilingan bo'ladi
+      try {
+        cred = JSON.parse(JSON.parse(`"${raw.replace(/"/g, '\\"')}"`));
+      } catch (e2) {
+        throw new Error(`FIREBASE_CREDENTIALS JSON parse xatoligi: ${e2.message}`);
+      }
+    }
+  } else if (raw.startsWith('"')) {
+    // Qo'sh tirnoq ichida saqlangan JSON string bo'lishi mumkin
+    try {
+      const unquoted = JSON.parse(raw);
+      cred = JSON.parse(unquoted);
+    } catch (e) {
+      throw new Error(`FIREBASE_CREDENTIALS (quoted) JSON parse xatoligi: ${e.message}`);
+    }
   } else {
-    // Faqat LOCAL uchun
-    cred = JSON.parse(fs.readFileSync(FIREBASE_CREDENTIALS, 'utf-8'));
+    // Faqat LOCAL uchun — fayl yo'li
+    if (!fs.existsSync(raw)) {
+      throw new Error(`Firebase credentials fayli topilmadi: ${raw}`);
+    }
+    try {
+      cred = JSON.parse(fs.readFileSync(raw, 'utf-8'));
+    } catch (e) {
+      throw new Error(`serviceAccountKey.json o'qishda xatolik: ${e.message}`);
+    }
+  }
+
+  // private_key ichidagi \\n ni \n ga almashtirish (Railway ko'pincha escape qilib yuboradi)
+  if (cred.private_key && typeof cred.private_key === 'string') {
+    cred.private_key = cred.private_key.replace(/\\n/g, '\n');
   }
 
   admin.initializeApp({
@@ -40,68 +70,68 @@ db.settings({ ignoreUndefinedProperties: true });
 
 /* ========= STATIC CATALOG ========= */
 const CATALOG = [
-  { id: 'listovye-materialy', title: 'Листовые материалы', categories: [
-    { id: 'pvh-yilong', title: 'ПВХ Формекс' }, //1
-    { id: 'orgsteklo-yilong', title: 'Оргстекло YiLong' }, //2
+  { id: 'listovye-materialy', title: '\u041b\u0438\u0441\u0442\u043e\u0432\u044b\u0435 \u043c\u0430\u0442\u0435\u0440\u0438\u0430\u043b\u044b', categories: [
+    { id: 'pvh-yilong', title: '\u041f\u0412\u0425 \u0424\u043e\u0440\u043c\u0435\u043a\u0441' }, //1
+    { id: 'orgsteklo-yilong', title: '\u041e\u0440\u0433\u0441\u0442\u0435\u043a\u043b\u043e YiLong' }, //2
     { id: 'pvc-yilong', title: 'PVC YiLong' }, //3
-    { id: 'akril-jun-shang', title: 'Акрил XT Xin Tao' }, //4
-    { id: 'roumark-gravirovka', title: 'Роумарк (пластик для гравировки)' }, //5
-    { id: 'alyukobond', title: 'Алюкобонд' }, //6
-    { id: 'penokarton', title: 'Пенокартон' }, //7
+    { id: 'akril-jun-shang', title: '\u0410\u043a\u0440\u0438\u043b XT Xin Tao' }, //4
+    { id: 'roumark-gravirovka', title: '\u0420\u043e\u0443\u043c\u0430\u0440\u043a (\u043f\u043b\u0430\u0441\u0442\u0438\u043a \u0434\u043b\u044f \u0433\u0440\u0430\u0432\u0438\u0440\u043e\u0432\u043a\u0438)' }, //5
+    { id: 'alyukobond', title: '\u0410\u043b\u044e\u043a\u043e\u0431\u043e\u043d\u0434' }, //6
+    { id: 'penokarton', title: '\u041f\u0435\u043d\u043e\u043a\u0430\u0440\u0442\u043e\u043d' }, //7
   ]},
-  { id: 'rulonnye-materialy', title: 'Рулонные материалы', categories: [
-    { id: 'banner-tkan', title: 'Баннерная ткань' }, //1
-    { id: 'cvetnaya-samokley-vinil', title: 'Цветная самоклеющаяся виниловая пленка' }, //2
-    { id: 'montazhnye-plenki', title: 'Монтажные пленки' }, //3
-    { id: 'vitrajnye-plenki', title: 'Витражные пленки' }, //4
-    { id: 'magnitnyj-vinil', title: 'Магнитный винил' }, //5
-    { id: 'beklit', title: 'Беклит' }, //6
-    { id: 'xolst', title: 'Холст' }, //7
-    { id: 'tkan-dlya-sublimatsionoy-pechati', title: 'Ткань для сублимационной печати' }, //8
-    { id: 'pechatniy-orakal', title: 'Печатний оракал' }, //9
+  { id: 'rulonnye-materialy', title: '\u0420\u0443\u043b\u043e\u043d\u043d\u044b\u0435 \u043c\u0430\u0442\u0435\u0440\u0438\u0430\u043b\u044b', categories: [
+    { id: 'banner-tkan', title: '\u0411\u0430\u043d\u043d\u0435\u0440\u043d\u0430\u044f \u0442\u043a\u0430\u043d\u044c' }, //1
+    { id: 'cvetnaya-samokley-vinil', title: '\u0426\u0432\u0435\u0442\u043d\u0430\u044f \u0441\u0430\u043c\u043e\u043a\u043b\u0435\u044e\u0449\u0430\u044f\u0441\u044f \u0432\u0438\u043d\u0438\u043b\u043e\u0432\u0430\u044f \u043f\u043b\u0435\u043d\u043a\u0430' }, //2
+    { id: 'montazhnye-plenki', title: '\u041c\u043e\u043d\u0442\u0430\u0436\u043d\u044b\u0435 \u043f\u043b\u0435\u043d\u043a\u0438' }, //3
+    { id: 'vitrajnye-plenki', title: '\u0412\u0438\u0442\u0440\u0430\u0436\u043d\u044b\u0435 \u043f\u043b\u0435\u043d\u043a\u0438' }, //4
+    { id: 'magnitnyj-vinil', title: '\u041c\u0430\u0433\u043d\u0438\u0442\u043d\u044b\u0439 \u0432\u0438\u043d\u0438\u043b' }, //5
+    { id: 'beklit', title: '\u0411\u0435\u043a\u043b\u0438\u0442' }, //6
+    { id: 'xolst', title: '\u0425\u043e\u043b\u0441\u0442' }, //7
+    { id: 'tkan-dlya-sublimatsionoy-pechati', title: '\u0422\u043a\u0430\u043d\u044c \u0434\u043b\u044f \u0441\u0443\u0431\u043b\u0438\u043c\u0430\u0446\u0438\u043e\u043d\u043d\u043e\u0439 \u043f\u0435\u0447\u0430\u0442\u0438' }, //8
+    { id: 'pechatniy-orakal', title: '\u041f\u0435\u0447\u0430\u0442\u043d\u0438\u0439 \u043e\u0440\u0430\u043a\u0430\u043b' }, //9
   ]},
-  { id: 'istochniki-sveta', title: 'Источники света (светодиоды, лампы и пр.)', categories: [
-    { id: 'led-prozhektory', title: 'LED прожекторы (соффиты)' }, //1
-    { id: 'moduli-svetodiodnye', title: 'Модули светодиодные' }, //2
-    { id: 'svetod-lenty', title: 'Светодиодные ленты' }, //3
-    { id: 'svetod-linejki-zhestkaya-osnova', title: 'Светодиодные линейки на жесткой основе' }, //4
-    { id: 'duralajt', title: 'Дюралайт светодиодный' }, //5
-    { id: 'svetilnik', title: 'Светильник' }, //6
-    { id: 'gibkij-neon', title: 'Гибкий неон светодиодный' }, //7
+  { id: 'istochniki-sveta', title: '\u0418\u0441\u0442\u043e\u0447\u043d\u0438\u043a\u0438 \u0441\u0432\u0435\u0442\u0430 (\u0441\u0432\u0435\u0442\u043e\u0434\u0438\u043e\u0434\u044b, \u043b\u0430\u043c\u043f\u044b \u0438 \u043f\u0440.)', categories: [
+    { id: 'led-prozhektory', title: 'LED \u043f\u0440\u043e\u0436\u0435\u043a\u0442\u043e\u0440\u044b (\u0441\u043e\u0444\u0444\u0438\u0442\u044b)' }, //1
+    { id: 'moduli-svetodiodnye', title: '\u041c\u043e\u0434\u0443\u043b\u0438 \u0441\u0432\u0435\u0442\u043e\u0434\u0438\u043e\u0434\u043d\u044b\u0435' }, //2
+    { id: 'svetod-lenty', title: '\u0421\u0432\u0435\u0442\u043e\u0434\u0438\u043e\u0434\u043d\u044b\u0435 \u043b\u0435\u043d\u0442\u044b' }, //3
+    { id: 'svetod-linejki-zhestkaya-osnova', title: '\u0421\u0432\u0435\u0442\u043e\u0434\u0438\u043e\u0434\u043d\u044b\u0435 \u043b\u0438\u043d\u0435\u0439\u043a\u0438 \u043d\u0430 \u0436\u0435\u0441\u0442\u043a\u043e\u0439 \u043e\u0441\u043d\u043e\u0432\u0435' }, //4
+    { id: 'duralajt', title: '\u0414\u044e\u0440\u0430\u043b\u0430\u0439\u0442 \u0441\u0432\u0435\u0442\u043e\u0434\u0438\u043e\u0434\u043d\u044b\u0439' }, //5
+    { id: 'svetilnik', title: '\u0421\u0432\u0435\u0442\u0438\u043b\u044c\u043d\u0438\u043a' }, //6
+    { id: 'gibkij-neon', title: '\u0413\u0438\u0431\u043a\u0438\u0439 \u043d\u0435\u043e\u043d \u0441\u0432\u0435\u0442\u043e\u0434\u0438\u043e\u0434\u043d\u044b\u0439' }, //7
   ]},
-  { id: 'transformatory-i-upravlenie', title: 'Трансформаторы и источники управления', categories: [
-    { id: 'transformatory-naruzh', title: 'Трансформаторы (наружные)' }, //1
-    { id: 'transformatory-vnutr', title: 'Трансформаторы (внутренние)' }, //2
+  { id: 'transformatory-i-upravlenie', title: '\u0422\u0440\u0430\u043d\u0441\u0444\u043e\u0440\u043c\u0430\u0442\u043e\u0440\u044b \u0438 \u0438\u0441\u0442\u043e\u0447\u043d\u0438\u043a\u0438 \u0443\u043f\u0440\u0430\u0432\u043b\u0435\u043d\u0438\u044f', categories: [
+    { id: 'transformatory-naruzh', title: '\u0422\u0440\u0430\u043d\u0441\u0444\u043e\u0440\u043c\u0430\u0442\u043e\u0440\u044b (\u043d\u0430\u0440\u0443\u0436\u043d\u044b\u0435)' }, //1
+    { id: 'transformatory-vnutr', title: '\u0422\u0440\u0430\u043d\u0441\u0444\u043e\u0440\u043c\u0430\u0442\u043e\u0440\u044b (\u0432\u043d\u0443\u0442\u0440\u0435\u043d\u043d\u0438\u0435)' }, //2
   ]},
-  { id: 'chernila-kraski', title: 'Чернила (краски)', categories: [
-    { id: 'solvent-kraski', title: 'Сольвентные краски' }, //1
-    { id: 'ecosolvent-kraski', title: 'Экосольвентные краски' }, //2
+  { id: 'chernila-kraski', title: '\u0427\u0435\u0440\u043d\u0438\u043b\u0430 (\u043a\u0440\u0430\u0441\u043a\u0438)', categories: [
+    { id: 'solvent-kraski', title: '\u0421\u043e\u043b\u044c\u0432\u0435\u043d\u0442\u043d\u044b\u0435 \u043a\u0440\u0430\u0441\u043a\u0438' }, //1
+    { id: 'ecosolvent-kraski', title: '\u042d\u043a\u043e\u0441\u043e\u043b\u044c\u0432\u0435\u043d\u0442\u043d\u044b\u0435 \u043a\u0440\u0430\u0441\u043a\u0438' }, //2
   ]},
-  { id: 'reklamno-vystavochnoe', title: 'Рекламное и выставочное оборудование', categories: [
-    { id: 'pop-up-stendy', title: 'Поп-ап стенды (pop up, пресс-стены)' }, //1
-    { id: 'roll-up', title: 'Ролл-стенды roll up и паучки' }, //2
-    { id: 'flagchiki-flagi', title: 'Флажочки (флаги)' }, //3
-    { id: 'promostoly', title: 'Промостолы, промостойки' }, //4
+  { id: 'reklamno-vystavochnoe', title: '\u0420\u0435\u043a\u043b\u0430\u043c\u043d\u043e\u0435 \u0438 \u0432\u044b\u0441\u0442\u0430\u0432\u043e\u0447\u043d\u043e\u0435 \u043e\u0431\u043e\u0440\u0443\u0434\u043e\u0432\u0430\u043d\u0438\u0435', categories: [
+    { id: 'pop-up-stendy', title: '\u041f\u043e\u043f-\u0430\u043f \u0441\u0442\u0435\u043d\u0434\u044b (pop up, \u043f\u0440\u0435\u0441\u0441-\u0441\u0442\u0435\u043d\u044b)' }, //1
+    { id: 'roll-up', title: '\u0420\u043e\u043b\u043b-\u0441\u0442\u0435\u043d\u0434\u044b roll up \u0438 \u043f\u0430\u0443\u0447\u043a\u0438' }, //2
+    { id: 'flagchiki-flagi', title: '\u0424\u043b\u0430\u0436\u043e\u0447\u043a\u0438 (\u0444\u043b\u0430\u0433\u0438)' }, //3
+    { id: 'promostoly', title: '\u041f\u0440\u043e\u043c\u043e\u0441\u0442\u043e\u043b\u044b, \u043f\u0440\u043e\u043c\u043e\u0441\u0442\u043e\u0439\u043a\u0438' }, //4
   ]},
-  { id: 'alyuminievye-profily', title: 'Алюминиевые профиля и комплектующие', categories: [
-    { id: 'profil-dlya-lent', title: 'Алюминиевый профиль для светодиодных лент' }, //1
+  { id: 'alyuminievye-profily', title: '\u0410\u043b\u044e\u043c\u0438\u043d\u0438\u0435\u0432\u044b\u0435 \u043f\u0440\u043e\u0444\u0438\u043b\u044f \u0438 \u043a\u043e\u043c\u043f\u043b\u0435\u043a\u0442\u0443\u044e\u0449\u0438\u0435', categories: [
+    { id: 'profil-dlya-lent', title: '\u0410\u043b\u044e\u043c\u0438\u043d\u0438\u0435\u0432\u044b\u0439 \u043f\u0440\u043e\u0444\u0438\u043b\u044c \u0434\u043b\u044f \u0441\u0432\u0435\u0442\u043e\u0434\u0438\u043e\u0434\u043d\u044b\u0445 \u043b\u0435\u043d\u0442' }, //1
   ]},
-  { id: 'kleevye-resheniya', title: 'Клеевые решения (скотч, клей)', categories: [
-    { id: 'skotch', title: 'Двусторонний ленты (скотч)' }, //1
-    { id: 'klej', title: 'Клей' }, //2
+  { id: 'kleevye-resheniya', title: '\u041a\u043b\u0435\u0435\u0432\u044b\u0435 \u0440\u0435\u0448\u0435\u043d\u0438\u044f (\u0441\u043a\u043e\u0442\u0447, \u043a\u043b\u0435\u0439)', categories: [
+    { id: 'skotch', title: '\u0414\u0432\u0443\u0441\u0442\u043e\u0440\u043e\u043d\u043d\u0438\u0439 \u043b\u0435\u043d\u0442\u044b (\u0441\u043a\u043e\u0442\u0447)' }, //1
+    { id: 'klej', title: '\u041a\u043b\u0435\u0439' }, //2
   ]},
-  { id: 'metal-i-plast-furnitura', title: 'Металлическая и пластиковая фурнитура', categories: [
-    { id: 'distantsionnye-derjateli-serebro', title: 'Дистанционные держатели (серебро)' }, //1
+  { id: 'metal-i-plast-furnitura', title: '\u041c\u0435\u0442\u0430\u043b\u043b\u0438\u0447\u0435\u0441\u043a\u0430\u044f \u0438 \u043f\u043b\u0430\u0441\u0442\u0438\u043a\u043e\u0432\u0430\u044f \u0444\u0443\u0440\u043d\u0438\u0442\u0443\u0440\u0430', categories: [
+    { id: 'distantsionnye-derjateli-serebro', title: '\u0414\u0438\u0441\u0442\u0430\u043d\u0446\u0438\u043e\u043d\u043d\u044b\u0435 \u0434\u0435\u0440\u0436\u0430\u0442\u0435\u043b\u0438 (\u0441\u0435\u0440\u0435\u0431\u0440\u043e)' }, //1
   ]},
-  { id: 'instrumenty', title: 'Инструменты', categories: [
-    { id: 'ruchnye-instrumenty', title: 'Ручные инструменты Hoji' }, //1
-    { id: 'lezviya-dlya-nozhey', title: 'Лезвия для ножей' },//2
-    { id: 'lyoversy-i-proboyniki', title: 'Люверсы и пробойники' },//3
-    { id: 'rakeli', title: 'Ракели' }, //4
+  { id: 'instrumenty', title: '\u0418\u043d\u0441\u0442\u0440\u0443\u043c\u0435\u043d\u0442\u044b', categories: [
+    { id: 'ruchnye-instrumenty', title: '\u0420\u0443\u0447\u043d\u044b\u0435 \u0438\u043d\u0441\u0442\u0440\u0443\u043c\u0435\u043d\u0442\u044b Hoji' }, //1
+    { id: 'lezviya-dlya-nozhey', title: '\u041b\u0435\u0437\u0432\u0438\u044f \u0434\u043b\u044f \u043d\u043e\u0436\u0435\u0439' },//2
+    { id: 'lyoversy-i-proboyniki', title: '\u041b\u044e\u0432\u0435\u0440\u0441\u044b \u0438 \u043f\u0440\u043e\u0431\u043e\u0439\u043d\u0438\u043a\u0438' },//3
+    { id: 'rakeli', title: '\u0420\u0430\u043a\u0435\u043b\u0438' }, //4
   ]},
-  { id: 'frezy-i-gravery', title: 'Фрезы и граверы', categories: [
-    { id: 'frezy', title: 'Фрезы' }, //1
-    { id: 'gravery', title: 'Граверы' }, //2
+  { id: 'frezy-i-gravery', title: '\u0424\u0440\u0435\u0437\u044b \u0438 \u0433\u0440\u0430\u0432\u0435\u0440\u044b', categories: [
+    { id: 'frezy', title: '\u0424\u0440\u0435\u0437\u044b' }, //1
+    { id: 'gravery', title: '\u0413\u0440\u0430\u0432\u0435\u0440\u044b' }, //2
   ]},
 ];
 
@@ -178,31 +208,31 @@ async function getTelegramFileUrl(ctx, fileId) {
 }
 
 const mainMenu = () => Markup.keyboard([
-  ['🛒 Product qo‘shish', '🖼 Banner qo‘shish']
+  ['\uD83D\uDED2 Product qo\u2019shish', '\uD83D\uDDBC Banner qo\u2019shish']
 ]).resize();
 
 const previewProductCaption = (p) =>
-  `🧾 <b>Oldindan ko‘rish</b>\n\n` +
+  `\uD83E\uDDFE <b>Oldindan ko\u2019rish</b>\n\n` +
   `<b>Nomi:</b> ${p.title}\n` +
   `<b>Narxi:</b> ${p.price}\n` +
-  `<b>Status:</b> ${p.available ? '✅ Bor' : '❌ Qolmagan'}\n` +
+  `<b>Status:</b> ${p.available ? '\u2705 Bor' : '\u274C Qolmagan'}\n` +
   `<b>Tavsif:</b> ${p.description}`;
 
 const productCardCaption = (p, secTitle = '', catTitle = '', szLabel = '') =>
-  `📦 <b>${p.title}</b>\n` +
-  `${secTitle && catTitle ? `<i>${secTitle} → ${catTitle}${szLabel ? ` → ${szLabel}`:''}</i>\n` : ''}` +
+  `\uD83D\uDCE6 <b>${p.title}</b>\n` +
+  `${secTitle && catTitle ? `<i>${secTitle} \u2192 ${catTitle}${szLabel ? ` \u2192 ${szLabel}`:''}</i>\n` : ''}` +
   `<b>Narx:</b> ${p.price}\n` +
-  `<b>Status:</b> ${p.available ? '✅ Bor' : '❌ Qolmagan'}\n\n` +
+  `<b>Status:</b> ${p.available ? '\u2705 Bor' : '\u274C Qolmagan'}\n\n` +
   `${p.description || ''}`;
 
 const actionKbFor = (available) => Markup.inlineKeyboard([
   [
     available
-      ? Markup.button.callback('❗️ Qolmagan', 'prod:toggle')
-      : Markup.button.callback('♻️ Mavjud qilsin', 'prod:toggle')
+      ? Markup.button.callback('\u2757\uFE0F Qolmagan', 'prod:toggle')
+      : Markup.button.callback('\u267B\uFE0F Mavjud qilsin', 'prod:toggle')
   ],
-  [Markup.button.callback('🗑️ O‘chirish', 'prod:delete')],
-  [Markup.button.callback('⬅️ Orqaga', 'back:items')]
+  [Markup.button.callback('\uD83D\uDDD1\uFE0F O\u2019chirish', 'prod:delete')],
+  [Markup.button.callback('\u2B05\uFE0F Orqaga', 'back:items')]
 ]);
 
 /* Firestore paths */
@@ -218,32 +248,32 @@ function sectionsKb(sections) {
 }
 function categoriesKb(sectionId, categories) {
   const rows = categories.map(c => [Markup.button.callback(c.title, `cat:${sectionId}:${c.id}`)]);
-  rows.push([Markup.button.callback('⬅️ Orqaga (bo‘limlar)', 'back:sections')]);
+  rows.push([Markup.button.callback('\u2B05\uFE0F Orqaga (bo\u2019limlar)', 'back:sections')]);
   return Markup.inlineKeyboard(rows);
 }
 function itemsKb(sectionId, categoryId, items) {
   const rows = items.map(i => {
-    const mark = i.available ? '✅' : '❌';
+    const mark = i.available ? '\u2705' : '\u274C';
     return [Markup.button.callback(`${mark} ${i.title}`, `pv:${i.id}`)];
   });
-  rows.push([Markup.button.callback('➕ Yangi tovar', 'padd')]);
-  rows.push([Markup.button.callback('⬅️ Orqaga (kategoriyalar)', 'back:cats')]);
+  rows.push([Markup.button.callback('\u2795 Yangi tovar', 'padd')]);
+  rows.push([Markup.button.callback('\u2B05\uFE0F Orqaga (kategoriyalar)', 'back:cats')]);
   return Markup.inlineKeyboard(rows);
 }
 function sizeViewFullKb(sectionId, categoryId, sizeId, items) {
   const rows = items.map(i => {
-    const mark = i.available ? '✅' : '❌';
+    const mark = i.available ? '\u2705' : '\u274C';
     return [Markup.button.callback(`${mark} ${i.title}`, `pv2:${i.id}`)];
   });
-  rows.push([Markup.button.callback('➕ Product qo‘shish', 'padd')]);
-  rows.push([Markup.button.callback('🗑️ O‘lchamni o‘chirish', 'szdel')]);
-  rows.push([Markup.button.callback('⬅️ Orqaga (o‘lchamlar)', 'back:sz')]);
+  rows.push([Markup.button.callback('\u2795 Product qo\u2019shish', 'padd')]);
+  rows.push([Markup.button.callback('\uD83D\uDDD1\uFE0F O\u2019lchamni o\u2019chirish', 'szdel')]);
+  rows.push([Markup.button.callback('\u2B05\uFE0F Orqaga (o\u2019lchamlar)', 'back:sz')]);
   return Markup.inlineKeyboard(rows);
 }
 function sizesKb(sectionId, categoryId, sizes) {
-  const rows = sizes.map(s => [Markup.button.callback(`${s.name} — ${s.size}`, `szv:${s.id}`)]);
-  rows.push([Markup.button.callback('➕ O‘lcham qo‘shish', 'szadd')]);
-  rows.push([Markup.button.callback('⬅️ Orqaga (kategoriyalar)', 'back:cats')]);
+  const rows = sizes.map(s => [Markup.button.callback(`${s.name} \u2014 ${s.size}`, `szv:${s.id}`)]);
+  rows.push([Markup.button.callback('\u2795 O\u2019lcham qo\u2019shish', 'szadd')]);
+  rows.push([Markup.button.callback('\u2B05\uFE0F Orqaga (kategoriyalar)', 'back:cats')]);
   return Markup.inlineKeyboard(rows);
 }
 
@@ -298,7 +328,7 @@ async function getTitles(sectionId, categoryId, sizeId) {
   if (sizeId) {
     const zDoc = await sizesRef(sectionId, categoryId).doc(sizeId).get();
     const z = zDoc.data();
-    if (z) szLabel = `${z.name} — ${z.size}`;
+    if (z) szLabel = `${z.name} \u2014 ${z.size}`;
   }
   return {
     sectionTitle: sDoc.data()?.title || sectionId,
@@ -334,7 +364,7 @@ function setPref(ctx, sectionId, categoryId, mode) {
 
 /* ========= COMMANDS ========= */
 bot.start(async (ctx) => {
-  await ctx.reply('Salom! 👋', mainMenu());
+  await ctx.reply('Salom! \uD83D\uDC4B', mainMenu());
 });
 bot.command('cancel', async (ctx) => {
   ctx.session = { flow: undefined, state: undefined, product: undefined, banner: undefined, sizeDraft: undefined, selected: undefined, prefer: {} };
@@ -343,27 +373,27 @@ bot.command('cancel', async (ctx) => {
 
 /* ========= TEXT HANDLER ========= */
 bot.on('text', async (ctx, next) => {
-  if (!isAdmin(ctx)) return ctx.reply('Sizda ruxsat yo‘q.');
+  if (!isAdmin(ctx)) return ctx.reply('Sizda ruxsat yo\u2019q.');
   ctx.session ??= { flow: undefined, state: undefined, product: undefined, banner: undefined, sizeDraft: undefined, selected: undefined, prefer: {} };
   const txt = (ctx.message?.text || '').trim();
 
-  if (txt === '🛒 Product qo‘shish') {
+  if (txt === '\uD83D\uDED2 Product qo\u2019shish') {
     ctx.session = { flow: 'product', state: undefined, product: undefined, banner: undefined, sizeDraft: undefined, selected: undefined, prefer: ctx.session.prefer || {} };
     const sections = await fetchSections();
-    return ctx.reply('Bo‘limni tanlang:', sectionsKb(sections));
+    return ctx.reply('Bo\u2019limni tanlang:', sectionsKb(sections));
   }
-  if (txt === '🖼 Banner qo‘shish') {
+  if (txt === '\uD83D\uDDBC Banner qo\u2019shish') {
     ctx.session = { flow: 'banner', state: B_IMAGE, product: undefined, banner: {}, sizeDraft: undefined, selected: undefined, prefer: ctx.session.prefer || {} };
     return ctx.reply('Banner uchun rasm yuboring (foto yoki http/https URL).');
   }
 
-  // Banner URL (URL bo‘lsa — to‘g‘ridan saqlaymiz)
+  // Banner URL (URL bo'lsa — to'g'ridan saqlaymiz)
   if (ctx.session.flow === 'banner' && ctx.session.state === B_IMAGE) {
-    if (!/^https?:\/\//.test(txt)) return ctx.reply('Iltimos, to‘g‘ri rasm URL (http/https) kiriting yoki foto yuboring.');
+    if (!/^https?:\/\//.test(txt)) return ctx.reply('Iltimos, to\u2019g\u2019ri rasm URL (http/https) kiriting yoki foto yuboring.');
     ctx.session.banner.image = txt;
     ctx.session.state = B_SECTION;
     const sections = await fetchSections();
-    return ctx.reply('Banner qaysi bo‘limga tegishli?', sectionsKb(sections));
+    return ctx.reply('Banner qaysi bo\u2019limga tegishli?', sectionsKb(sections));
   }
 
   // Banner caption
@@ -374,7 +404,7 @@ bot.on('text', async (ctx, next) => {
       sectionId: ctx.session.banner?.sectionId,
       caption
     });
-    if (!parsed.success) return ctx.reply('❌ Banner maʼlumotlari to‘liq emas. /start dan qayta boshlang.');
+    if (!parsed.success) return ctx.reply('❌ Banner ma\u02bclumotlari to\u2019liq emas. /start dan qayta boshlang.');
     try {
       await db.collection('banners').add({
         image: parsed.data.image,
@@ -382,7 +412,7 @@ bot.on('text', async (ctx, next) => {
         caption: parsed.data.caption || null,
         createdAt: admin.firestore.FieldValue.serverTimestamp()
       });
-      await ctx.reply('✅ Banner saqlandi!', mainMenu());
+      await ctx.reply('\u2705 Banner saqlandi!', mainMenu());
     } catch (e) {
       console.error('Banner save error:', e);
       await ctx.reply(`❌ Saqlashda xatolik: ${String(e)}`);
@@ -392,9 +422,9 @@ bot.on('text', async (ctx, next) => {
     return;
   }
 
-  // Category image text URL (URL bo‘lsa — to‘g‘ridan saqlaymiz)
+  // Category image text URL (URL bo'lsa — to'g'ridan saqlaymiz)
   if (ctx.session.flow === 'product' && ctx.session.state === CAT_IMAGE) {
-    if (!/^https?:\/\//.test(txt)) return ctx.reply('Kategoriya uchun to‘g‘ri rasm URL kiriting (http/https) yoki foto yuboring.');
+    if (!/^https?:\/\//.test(txt)) return ctx.reply('Kategoriya uchun to\u2019g\u2019ri rasm URL kiriting (http/https) yoki foto yuboring.');
     const { sectionId, categoryId } = ctx.session.selected || {};
     await categoriesRef(sectionId).doc(categoryId).set({ image: txt }, { merge: true });
     ctx.session.selected.catImage = txt;
@@ -406,7 +436,7 @@ bot.on('text', async (ctx, next) => {
   if (ctx.session.flow === 'product' && ctx.session.state === SZ_NAME) {
     ctx.session.sizeDraft = { name: txt };
     ctx.session.state = SZ_SIZE;
-    return ctx.reply('O‘lchamni kiriting (masalan: 1,22м х 2,44м):');
+    return ctx.reply('O\u2019lchamni kiriting (masalan: 1,22\u043c \u0445 2,44\u043c):');
   }
   if (ctx.session.flow === 'product' && ctx.session.state === SZ_SIZE) {
     const { sectionId, categoryId, catImage } = ctx.session.selected || {};
@@ -414,31 +444,31 @@ bot.on('text', async (ctx, next) => {
     const parsed = SizeSchema.safeParse(draft);
     if (!parsed.success) {
       ctx.session.sizeDraft = undefined; ctx.session.state = undefined;
-      return ctx.reply('❌ O‘lcham maʼlumotlari noto‘g‘ri. /start dan qayta urinib ko‘ring.');
+      return ctx.reply('❌ O\u2019lcham ma\u02bclumotlari noto\u2019g\u2019ri. /start dan qayta urinib ko\u2019ring.');
     }
     await sizesRef(sectionId, categoryId).add({ ...parsed.data, createdAt: admin.firestore.FieldValue.serverTimestamp() });
     ctx.session.sizeDraft = undefined; ctx.session.state = undefined;
     return renderSizeList(ctx);
   }
 
-  // Product form (URL bo‘lsa shu yerda qabul qilinadi; RASM bo‘lsa photo handler ushlaydi)
+  // Product form (URL bo'lsa shu yerda qabul qilinadi; RASM bo'lsa photo handler ushlaydi)
   if (ctx.session.flow === 'product') {
     switch (ctx.session.state) {
       case S_TITLE:
         ctx.session.product = { ...(ctx.session.product||{}), title: txt };
         ctx.session.state = S_IMAGE;
-        return ctx.reply('2/4 — Rasm yuboring (foto yoki http/https URL).');
+        return ctx.reply('2/4 \u2014 Rasm yuboring (foto yoki http/https URL).');
       case S_IMAGE:
         if (!/^https?:\/\//.test(txt)) {
           return ctx.reply('Rasm uchun http/https URL kiriting yoki oddiy rasmni foto sifatida yuboring.');
         }
         ctx.session.product.image = txt;
         ctx.session.state = S_PRICE;
-        return ctx.reply(`3/4 — Narxni yuboring (masalan: "2 500 so'm"):`);
+        return ctx.reply(`3/4 \u2014 Narxni yuboring (masalan: "2 500 so'm"):`);
       case S_PRICE:
         ctx.session.product.price = txt;
         ctx.session.state = S_DESC;
-        return ctx.reply('4/4 — Tavsif (description) yuboring:');
+        return ctx.reply('4/4 \u2014 Tavsif (description) yuboring:');
       case S_DESC: {
         ctx.session.product.description = txt;
         const { sectionId, categoryId, mode, sizeId } = ctx.session.selected || {};
@@ -450,7 +480,7 @@ bot.on('text', async (ctx, next) => {
         };
         const parsed = ProductSchema.safeParse(draft);
         if (!parsed.success) {
-          const msg = parsed.error.errors.map(e => `• ${e.path.join('.')}: ${e.message}`).join('\n');
+          const msg = parsed.error.errors.map(e => `\u2022 ${e.path.join('.')}: ${e.message}`).join('\n');
           ctx.session.state = undefined; ctx.session.product = undefined;
           return ctx.reply(`❌ Ma'lumot xato:\n${msg}\n\nQayta boshlash uchun /start bosing.`);
         }
@@ -460,14 +490,14 @@ bot.on('text', async (ctx, next) => {
             caption: previewProductCaption(draft),
             parse_mode: 'HTML',
             ...Markup.inlineKeyboard([
-              [Markup.button.callback('✅ Saqlash', 'save'), Markup.button.callback('❌ Bekor qilish', 'discard')]
+              [Markup.button.callback('\u2705 Saqlash', 'save'), Markup.button.callback('❌ Bekor qilish', 'discard')]
             ])
           });
         } catch {
-          await ctx.reply(`⚠️ Rasmni yuborib bo‘lmadi.\n\n${previewProductCaption(draft)}`, {
+          await ctx.reply(`\u26A0\uFE0F Rasmni yuborib bo\u2019lmadi.\n\n${previewProductCaption(draft)}`, {
             parse_mode: 'HTML',
             ...Markup.inlineKeyboard([
-              [Markup.button.callback('✅ Saqlash', 'save'), Markup.button.callback('❌ Bekor qilish', 'discard')]
+              [Markup.button.callback('\u2705 Saqlash', 'save'), Markup.button.callback('❌ Bekor qilish', 'discard')]
             ])
           });
         }
@@ -482,7 +512,7 @@ bot.on('text', async (ctx, next) => {
 
 /* ========= PHOTO HANDLERS ========= */
 bot.on('photo', async (ctx) => {
-  if (!isAdmin(ctx)) return ctx.reply('Sizda ruxsat yo‘q.');
+  if (!isAdmin(ctx)) return ctx.reply('Sizda ruxsat yo\u2019q.');
 
   // Banner photo => imgbb ga yuklab, display_url ni saqlash
   if (ctx.session.flow === 'banner' && ctx.session.state === B_IMAGE) {
@@ -493,7 +523,7 @@ bot.on('photo', async (ctx) => {
       ctx.session.banner.image = imgbbUrl;
       ctx.session.state = B_SECTION;
       const sections = await fetchSections();
-      return ctx.reply('Banner qaysi bo‘limga tegishli?', sectionsKb(sections));
+      return ctx.reply('Banner qaysi bo\u2019limga tegishli?', sectionsKb(sections));
     } catch (e) {
       console.error('Banner photo upload error:', e);
       return ctx.reply('Rasmni yuklashda xatolik. Boshqa foto yuboring yoki URL kiriting.');
@@ -525,7 +555,7 @@ bot.on('photo', async (ctx) => {
       const imgbbUrl = await uploadToImgbbByUrl(tgFileUrl, `product_${best.file_unique_id || Date.now()}`);
       ctx.session.product = { ...(ctx.session.product || {}), image: imgbbUrl };
       ctx.session.state = S_PRICE;
-      return ctx.reply('3/4 — Narxni yuboring (masalan: "от 2 500 ₸" yoki "2500 ₸"):');
+      return ctx.reply('3/4 \u2014 Narxni yuboring (masalan: "\u043e\u0442 2 500 \u20B8" yoki "2500 \u20B8"):');
     } catch (e) {
       console.error('Product photo upload error:', e);
       return ctx.reply('Rasmni yuklashda xatolik. Boshqa foto yuboring yoki URL kiriting.');
@@ -537,7 +567,7 @@ bot.on('photo', async (ctx) => {
 bot.action('back:sections', async (ctx) => {
   await ctx.answerCbQuery();
   const sections = await fetchSections();
-  await ctx.editMessageText('Bo‘limni tanlang:', sectionsKb(sections));
+  await ctx.editMessageText('Bo\u2019limni tanlang:', sectionsKb(sections));
 });
 bot.action('back:cats', async (ctx) => {
   await ctx.answerCbQuery();
@@ -569,7 +599,7 @@ bot.action(/^sec:(.+)$/, async (ctx) => {
   if (ctx.session.flow === 'banner' && ctx.session.state === B_SECTION) {
     ctx.session.banner.sectionId = sectionId;
     ctx.session.state = B_CAPTION;
-    return ctx.editMessageText('Banner uchun sarlavha (ixtiyoriy). O‘tkazish uchun “-” yozing.');
+    return ctx.editMessageText('Banner uchun sarlavha (ixtiyoriy). O\u2019tkazish uchun "-" yozing.');
   }
 });
 
@@ -582,7 +612,7 @@ async function ensureCategoryImageOrAsk(ctx, sectionId, categoryId) {
     return true;
   }
   ctx.session.state = CAT_IMAGE;
-  await ctx.editMessageText('Ushbu kategoriya uchun rasm yuboring (foto — imgbb ga avtomatik yuklanadi, yoki http/https URL kiriting).');
+  await ctx.editMessageText('Ushbu kategoriya uchun rasm yuboring (foto \u2014 imgbb ga avtomatik yuklanadi, yoki http/https URL kiriting).');
   return false;
 }
 
@@ -621,9 +651,9 @@ async function routeAfterCategorySelection(ctx, { forceMode } = {}) {
   return ctx.reply(
     'Rejimni tanlang:',
     Markup.inlineKeyboard([
-      [Markup.button.callback('🧩 Mahsulot kiritish', 'md:p')],
-      [Markup.button.callback('📐 O‘lchamlar bilan', 'md:s')],
-      [Markup.button.callback('⬅️ Orqaga (kategoriyalar)', 'back:cats')]
+      [Markup.button.callback('\uD83E\uDDE9 Mahsulot kiritish', 'md:p')],
+      [Markup.button.callback('\uD83D\uDCCF O\u2019lchamlar bilan', 'md:s')],
+      [Markup.button.callback('\u2B05\uFE0F Orqaga (kategoriyalar)', 'back:cats')]
     ])
   );
 }
@@ -660,9 +690,9 @@ async function renderCategoryItems(ctx, edit = false) {
   const list = await fetchItemsCat(sectionId, categoryId, 30);
   const kb = itemsKb(sectionId, categoryId, list);
   if (edit) {
-    try { await ctx.editMessageText('Mahsulotlar (tanlang) yoki yangi tovar qo‘shing:', kb); return; } catch {}
+    try { await ctx.editMessageText('Mahsulotlar (tanlang) yoki yangi tovar qo\u2019shing:', kb); return; } catch {}
   }
-  await ctx.reply('Mahsulotlar (tanlang) yoki yangi tovar qo‘shing:', kb);
+  await ctx.reply('Mahsulotlar (tanlang) yoki yangi tovar qo\u2019shing:', kb);
 }
 
 async function renderSizeList(ctx, edit = false) {
@@ -670,9 +700,9 @@ async function renderSizeList(ctx, edit = false) {
   const list = await fetchSizes(sectionId, categoryId, 50);
   const kb = sizesKb(sectionId, categoryId, list);
   if (edit) {
-    try { await ctx.editMessageText('O‘lchamlar ro‘yxati:', kb); return; } catch {}
+    try { await ctx.editMessageText('O\u2019lchamlar ro\u2019yxati:', kb); return; } catch {}
   }
-  await ctx.reply('O‘lchamlar ro‘yxati:', kb);
+  await ctx.reply('O\u2019lchamlar ro\u2019yxati:', kb);
 }
 
 async function renderSizeView(ctx, editHeader = false) {
@@ -680,7 +710,7 @@ async function renderSizeView(ctx, editHeader = false) {
   const zDoc = await sizesRef(sectionId, categoryId).doc(sizeId).get();
   if (!zDoc.exists) return renderSizeList(ctx, true);
   const z = zDoc.data();
-  const caption = `📐 <b>${z.name}</b>\n<b>O‘lcham:</b> ${z.size}\n`;
+  const caption = `\uD83D\uDCCF <b>${z.name}</b>\n<b>O\u2019lcham:</b> ${z.size}\n`;
   const items = await fetchItemsSize(sectionId, categoryId, sizeId, 50);
   const kb = sizeViewFullKb(sectionId, categoryId, sizeId, items);
 
@@ -699,14 +729,14 @@ bot.action('szadd', async (ctx) => {
   await ctx.answerCbQuery();
   ctx.session.state = SZ_NAME;
   ctx.session.sizeDraft = {};
-  await ctx.reply('O‘lcham nomini kiriting (masalan: ПВХ стандартной плотности 0,50):');
+  await ctx.reply('O\u2019lcham nomini kiriting (masalan: \u041f\u0412\u0425 \u0441\u0442\u0430\u043d\u0434\u0430\u0440\u0442\u043d\u043e\u0439 \u043f\u043b\u043e\u0442\u043d\u043e\u0441\u0442\u0438 0,50):');
 });
 
 bot.action(/^szv:(.+)$/, async (ctx) => {
   await ctx.answerCbQuery();
   const sizeId = ctx.match[1];
   const { sectionId, categoryId } = ctx.session.selected || {};
-  if (!sectionId || !categoryId) return ctx.reply('❌ Kontekst yo‘q. /start');
+  if (!sectionId || !categoryId) return ctx.reply('❌ Kontekst yo\u2019q. /start');
   ctx.session.selected.sizeId = sizeId;
   ctx.session.selected.mode = 'size';
   return renderSizeView(ctx, true);
@@ -715,17 +745,17 @@ bot.action(/^szv:(.+)$/, async (ctx) => {
 bot.action('szdel', async (ctx) => {
   await ctx.answerCbQuery();
   const { sectionId, categoryId, sizeId } = ctx.session.selected || {};
-  if (!sectionId || !categoryId || !sizeId) return ctx.reply('❌ Kontekst yo‘q. /start');
+  if (!sectionId || !categoryId || !sizeId) return ctx.reply('❌ Kontekst yo\u2019q. /start');
   try {
     const snap = await itemsRefSize(sectionId, categoryId, sizeId).get();
     const batch = db.batch();
     snap.docs.forEach(d => batch.delete(d.ref));
     await batch.commit();
     await sizesRef(sectionId, categoryId).doc(sizeId).delete();
-    await ctx.reply('🗑️ O‘lcham o‘chirildi.');
+    await ctx.reply('\uD83D\uDDD1\uFE0F O\u2019lcham o\u2019chirildi.');
   } catch (e) {
     console.error('Size delete error:', e);
-    await ctx.reply(`❌ O‘lchamni o‘chirishda xatolik: ${String(e)}`);
+    await ctx.reply(`❌ O\u2019lchamni o\u2019chirishda xatolik: ${String(e)}`);
   }
   return renderSizeList(ctx);
 });
@@ -735,7 +765,7 @@ bot.action(/^pv:(.+)$/, async (ctx) => {
   await ctx.answerCbQuery();
   const docId = ctx.match[1];
   const { sectionId, categoryId } = ctx.session.selected || {};
-  if (!sectionId || !categoryId) return ctx.reply('❌ Kontekst yo‘q. /start');
+  if (!sectionId || !categoryId) return ctx.reply('❌ Kontekst yo\u2019q. /start');
   ctx.session.selected.docId = docId;
   ctx.session.selected.mode = 'prod';
 
@@ -761,7 +791,7 @@ bot.action(/^pv2:(.+)$/, async (ctx) => {
   await ctx.answerCbQuery();
   const docId = ctx.match[1];
   const { sectionId, categoryId, sizeId } = ctx.session.selected || {};
-  if (!sectionId || !categoryId || !sizeId) return ctx.reply('❌ Kontekst yo‘q. /start');
+  if (!sectionId || !categoryId || !sizeId) return ctx.reply('❌ Kontekst yo\u2019q. /start');
 
   ctx.session.selected.docId = docId;
   ctx.session.selected.mode = 'size';
@@ -788,12 +818,12 @@ bot.action('padd', async (ctx) => {
   await ctx.answerCbQuery();
   const { sectionId, categoryId, mode, sizeId } = ctx.session.selected || {};
   if (!sectionId || !categoryId) return ctx.reply('❌ Avval kategoriya tanlang.');
-  if (mode === 'size' && !sizeId) return ctx.reply('❌ Avval o‘lchamni tanlang.');
+  if (mode === 'size' && !sizeId) return ctx.reply('❌ Avval o\u2019lchamni tanlang.');
 
   ctx.session.flow = 'product';
   ctx.session.product = {};
   ctx.session.state = S_TITLE;
-  await ctx.reply('1/4 — Tovar nomini yuboring (title):');
+  await ctx.reply('1/4 \u2014 Tovar nomini yuboring (title):');
 });
 
 /* ======= SAVE / DISCARD product ======= */
@@ -815,7 +845,7 @@ bot.action('save', async (ctx) => {
 
   const parsed = ProductSchema.safeParse(draft);
   if (!parsed.success) {
-    const msg = parsed.error.errors.map(e => `• ${e.path.join('.')}: ${e.message}`).join('\n');
+    const msg = parsed.error.errors.map(e => `\u2022 ${e.path.join('.')}: ${e.message}`).join('\n');
     try { await ctx.editMessageCaption({ caption: `❌ Validatsiya xatosi:\n${msg}`, parse_mode: 'HTML' }); } catch {}
     return;
   }
@@ -829,7 +859,7 @@ bot.action('save', async (ctx) => {
     }
     console.log('Product saved:', ref.id, 'mode=', mode);
 
-    try { await ctx.editMessageCaption({ caption: `✅ Saqlandi!`, parse_mode: 'HTML' }); } catch {}
+    try { await ctx.editMessageCaption({ caption: `\u2705 Saqlandi!`, parse_mode: 'HTML' }); } catch {}
   } catch (e) {
     console.error('Product save error:', e);
     try { await ctx.editMessageCaption({ caption: `❌ Saqlashda xatolik: ${String(e)}`, parse_mode: 'HTML' }); } catch {}
@@ -846,7 +876,7 @@ bot.action('save', async (ctx) => {
 
 bot.action('discard', async (ctx) => {
   await ctx.answerCbQuery();
-  try { await ctx.editMessageCaption({ caption: '🗑️ Bekor qilindi.', parse_mode: 'HTML' }); } catch {}
+  try { await ctx.editMessageCaption({ caption: '\uD83D\uDDD1\uFE0F Bekor qilindi.', parse_mode: 'HTML' }); } catch {}
   ctx.session.state = undefined;
   ctx.session.product = undefined;
 
@@ -859,13 +889,13 @@ bot.action('discard', async (ctx) => {
 bot.action('prod:delete', async (ctx) => {
   await ctx.answerCbQuery();
   const { sectionId, categoryId, docId, mode, sizeId } = ctx.session.selected || {};
-  if (!sectionId || !categoryId || !docId) return ctx.reply('❌ Kontekst yo‘q. /start');
+  if (!sectionId || !categoryId || !docId) return ctx.reply('❌ Kontekst yo\u2019q. /start');
   try {
     if (mode === 'size' && sizeId) await itemsRefSize(sectionId, categoryId, sizeId).doc(docId).delete();
     else await itemsRefCat(sectionId, categoryId).doc(docId).delete();
   } catch (e) {
     console.error('Delete error:', e);
-    await ctx.reply(`❌ O‘chirishda xatolik: ${String(e)}`);
+    await ctx.reply(`❌ O\u2019chirishda xatolik: ${String(e)}`);
   }
   if (mode === 'size') return renderSizeView(ctx, true);
   return renderCategoryItems(ctx, true);
@@ -874,7 +904,7 @@ bot.action('prod:delete', async (ctx) => {
 bot.action('prod:toggle', async (ctx) => {
   await ctx.answerCbQuery();
   const { sectionId, categoryId, docId, mode, sizeId } = ctx.session.selected || {};
-  if (!sectionId || !categoryId || !docId) return ctx.reply('❌ Kontekst yo‘q. /start');
+  if (!sectionId || !categoryId || !docId) return ctx.reply('❌ Kontekst yo\u2019q. /start');
 
   try {
     if (mode === 'size' && sizeId) {
@@ -908,7 +938,7 @@ async function seedCatalogIfNeededAndStart() {
 async function main() {
   await seedCatalogIfNeededAndStart();
   await bot.launch();
-  console.log('Bot ishga tushdi…');
+  console.log('Bot ishga tushdi\u2026');
 }
 main().catch(err => console.error('Launch error:', err));
 
